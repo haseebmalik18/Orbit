@@ -1,0 +1,19 @@
+[project]
+name = "orbit"
+version = "0.1.0"
+description = "An Airflow DAG that repairs Airflow DAGs."
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+markers = [
+    "airflow: requires a working Airflow install; run with `astro dev pytest`",
+]
+
+[tool.ruff]
+line-length = 90
+target-version = "py312"
