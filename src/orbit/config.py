@@ -21,9 +21,10 @@ class Settings:
             os.getenv("ORBIT_DB_PATH", "/usr/local/airflow/.orbit/orbit.db")
         )
     )
+    # container-internal hostname: the listener runs in the scheduler, not on the host
     airflow_api_url: str = field(
         default_factory=lambda: os.getenv(
-            "ORBIT_AIRFLOW_API_URL", "http://localhost:8080/api/v2"
+            "ORBIT_AIRFLOW_API_URL", "http://api-server:8080/api/v2"
         )
     )
     airflow_api_token: str = field(
