@@ -26,3 +26,5 @@ fixtures/*.duckdb
 orbit_project_plan.md
 README.md
 docs/superpowers/
+
+.orbit/

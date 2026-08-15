@@ -18,7 +18,7 @@ def _csv_env(name: str, default: list[str]) -> list[str]:
 class Settings:
     db_path: Path = field(
         default_factory=lambda: Path(
-            os.getenv("ORBIT_DB_PATH", "/usr/local/airflow/orbit.db")
+            os.getenv("ORBIT_DB_PATH", "/usr/local/airflow/.orbit/orbit.db")
         )
     )
     airflow_api_url: str = field(

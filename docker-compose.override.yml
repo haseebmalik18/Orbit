@@ -1,0 +1,15 @@
+x-orbit-volumes: &orbit-volumes
+  - ./src:/usr/local/airflow/src:ro
+  - ./fixtures:/usr/local/airflow/fixtures:ro
+  # scheduler writes incidents, api-server reads them: needs to be one file
+  - ./.orbit:/usr/local/airflow/.orbit:rw
+
+services:
+  scheduler:
+    volumes: *orbit-volumes
+  dag-processor:
+    volumes: *orbit-volumes
+  api-server:
+    volumes: *orbit-volumes
+  triggerer:
+    volumes: *orbit-volumes
