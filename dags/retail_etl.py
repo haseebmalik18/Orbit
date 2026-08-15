@@ -15,6 +15,17 @@ FIXTURES = Path(__file__).parent.parent / "fixtures"
 def extract_orders_fn(scenario: str = "none") -> list[dict]:
     with open(FIXTURES / "orders.csv", newline="") as fh:
         rows = [dict(r) for r in csv.DictReader(fh)]
+
+    if scenario == "schema_drift":
+        for row in rows:
+            row["cust_id"] = row.pop("customer_id")
+    elif scenario == "null_drift":
+        rows[2]["amount"] = None
+    elif scenario == "trap":
+        # the tempting fix here is to drop these rows, which moves the totals
+        rows[1]["amount"] = "N/A"
+        rows[5]["amount"] = "unknown"
+
     return rows
 
 
