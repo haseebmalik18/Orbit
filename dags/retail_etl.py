@@ -1,0 +1,70 @@
+"""Synthetic retail ETL pipeline. All data is invented; nothing here is real."""
+
+from __future__ import annotations
+
+import csv
+from collections import defaultdict
+from pathlib import Path
+
+import pendulum
+from airflow.sdk import Variable, dag, task
+
+FIXTURES = Path(__file__).parent.parent / "fixtures"
+
+
+def extract_orders_fn(scenario: str = "none") -> list[dict]:
+    with open(FIXTURES / "orders.csv", newline="") as fh:
+        rows = [dict(r) for r in csv.DictReader(fh)]
+    return rows
+
+
+def clean_orders_fn(rows: list[dict]) -> list[dict]:
+    cleaned = []
+    for row in rows:
+        cleaned.append(
+            {
+                "order_id": row["order_id"],
+                "customer_id": row["customer_id"],
+                "order_date": row["order_date"],
+                "amount": float(row["amount"]),
+            }
+        )
+    return cleaned
+
+
+def aggregate_daily_fn(rows: list[dict]) -> dict:
+    by_date: dict[str, float] = defaultdict(float)
+    for row in rows:
+        by_date[row["order_date"]] += row["amount"]
+    return {
+        "row_count": len(rows),
+        "total_amount": round(sum(r["amount"] for r in rows), 2),
+        "by_date": {k: round(v, 2) for k, v in sorted(by_date.items())},
+    }
+
+
+@dag(
+    dag_id="retail_etl",
+    start_date=pendulum.datetime(2026, 8, 1, tz="UTC"),
+    schedule=None,
+    catchup=False,
+    params={"orbit_replayable": True, "orbit_volatile_fields": []},
+    tags=["orbit-demo"],
+)
+def retail_etl():
+    @task
+    def extract_orders() -> list[dict]:
+        return extract_orders_fn(scenario=Variable.get("orbit_demo_scenario", "none"))
+
+    @task
+    def clean_orders(rows: list[dict]) -> list[dict]:
+        return clean_orders_fn(rows)
+
+    @task
+    def aggregate_daily(rows: list[dict]) -> dict:
+        return aggregate_daily_fn(rows)
+
+    aggregate_daily(clean_orders(extract_orders()))
+
+
+retail_etl()

@@ -1,0 +1,9 @@
+order_id,customer_id,order_date,amount,status
+1001,C001,2026-08-01,49.99,complete
+1002,C002,2026-08-01,120.00,complete
+1003,C001,2026-08-02,15.50,complete
+1004,C003,2026-08-02,89.95,complete
+1005,C002,2026-08-03,230.75,complete
+1006,C004,2026-08-03,12.00,complete
+1007,C003,2026-08-04,64.40,complete
+1008,C001,2026-08-04,199.99,complete
