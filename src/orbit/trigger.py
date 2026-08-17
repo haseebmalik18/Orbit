@@ -16,27 +16,58 @@ class AirflowClient:
 
     Airflow 3 removed metadata-DB access from worker and task context, so every
     read of Airflow state goes through here rather than a SQLAlchemy session.
+
+    Pass `token` to use a fixed credential, otherwise one is minted from
+    /auth/token on first use. SimpleAuthManager tokens expire after 24h, so
+    minting beats baking a static token into the environment.
     """
 
-    def __init__(self, base_url: str, token: str) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str = "",
+        username: str = "admin",
+        password: str = "admin",
+    ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.token = token
+        self.username = username
+        self.password = password
+        self._token = token or ""
 
     @property
+    def api_url(self) -> str:
+        return f"{self.base_url}/api/v2"
+
+    def _mint_token(self) -> str:
+        try:
+            response = requests.post(
+                f"{self.base_url}/auth/token",
+                json={"username": self.username, "password": self.password},
+                headers={"Content-Type": "application/json"},
+                timeout=TIMEOUT_S,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise TriggerFailed(f"could not obtain an Airflow token: {exc}") from exc
+        return response.json()["access_token"]
+
     def _headers(self) -> dict[str, str]:
+        if not self._token:
+            self._token = self._mint_token()
         return {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {self._token}",
             "Content-Type": "application/json",
         }
 
     def trigger_dag(self, dag_id: str, conf: dict[str, Any]) -> str:
+        headers = self._headers()
         # logical_date must be present even when null; omitting it is a 422
         body = {"logical_date": None, "conf": conf}
         try:
             response = requests.post(
-                f"{self.base_url}/dags/{dag_id}/dagRuns",
+                f"{self.api_url}/dags/{dag_id}/dagRuns",
                 json=body,
-                headers=self._headers,
+                headers=headers,
                 timeout=TIMEOUT_S,
             )
             response.raise_for_status()
@@ -48,9 +79,9 @@ class AirflowClient:
         self, dag_id: str, run_id: str, task_id: str, key: str = "return_value"
     ) -> Any:
         response = requests.get(
-            f"{self.base_url}/dags/{dag_id}/dagRuns/{run_id}"
+            f"{self.api_url}/dags/{dag_id}/dagRuns/{run_id}"
             f"/taskInstances/{task_id}/xcomEntries/{key}",
-            headers=self._headers,
+            headers=self._headers(),
             timeout=TIMEOUT_S,
         )
         response.raise_for_status()
@@ -58,9 +89,9 @@ class AirflowClient:
 
     def list_successful_runs(self, dag_id: str, task_id: str, limit: int) -> list[str]:
         response = requests.get(
-            f"{self.base_url}/dags/{dag_id}/dagRuns",
+            f"{self.api_url}/dags/{dag_id}/dagRuns",
             params={"state": "success", "limit": limit, "order_by": "-logical_date"},
-            headers=self._headers,
+            headers=self._headers(),
             timeout=TIMEOUT_S,
         )
         response.raise_for_status()
@@ -70,9 +101,9 @@ class AirflowClient:
         self, dag_id: str, run_id: str, task_id: str, try_number: int
     ) -> list[str]:
         response = requests.get(
-            f"{self.base_url}/dags/{dag_id}/dagRuns/{run_id}"
+            f"{self.api_url}/dags/{dag_id}/dagRuns/{run_id}"
             f"/taskInstances/{task_id}/logs/{try_number}",
-            headers={**self._headers, "Accept": "application/json"},
+            headers={**self._headers(), "Accept": "application/json"},
             timeout=TIMEOUT_S,
         )
         response.raise_for_status()

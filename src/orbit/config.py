@@ -22,10 +22,18 @@ class Settings:
         )
     )
     # container-internal hostname: the listener runs in the scheduler, not on the host
-    airflow_api_url: str = field(
+    airflow_base_url: str = field(
         default_factory=lambda: os.getenv(
-            "ORBIT_AIRFLOW_API_URL", "http://api-server:8080/api/v2"
+            "ORBIT_AIRFLOW_BASE_URL", "http://api-server:8080"
         )
+    )
+    # SimpleAuthManager tokens expire in 24h, so we mint them on demand rather
+    # than baking a static one into the environment
+    airflow_username: str = field(
+        default_factory=lambda: os.getenv("ORBIT_AIRFLOW_USERNAME", "admin")
+    )
+    airflow_password: str = field(
+        default_factory=lambda: os.getenv("ORBIT_AIRFLOW_PASSWORD", "admin")
     )
     airflow_api_token: str = field(
         default_factory=lambda: os.getenv("ORBIT_AIRFLOW_API_TOKEN", "")
