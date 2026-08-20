@@ -22,7 +22,7 @@ CATEGORY_BY_EXCEPTION = {
 
 RENAME_PATCH = '''--- a/retail_etl.py
 +++ b/retail_etl.py
-@@ -35,7 +35,7 @@ def clean_orders_fn(rows: list[dict]) -> list[dict]:
+@@ -37,7 +37,7 @@ def clean_orders_fn(rows: list[dict]) -> list[dict]:
          cleaned.append(
              {
                  "order_id": row["order_id"],
