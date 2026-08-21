@@ -47,6 +47,42 @@ class Settings:
     log_tail_lines: int = field(
         default_factory=lambda: int(os.getenv("ORBIT_LOG_TAIL_LINES", "200"))
     )
+    # stubs stay the default so CI and non-agent work cost nothing
+    use_stub_agents: bool = field(
+        default_factory=lambda: os.getenv("ORBIT_USE_STUB_AGENTS", "1") == "1"
+    )
+    detector_conn_id: str = field(
+        default_factory=lambda: os.getenv("ORBIT_DETECTOR_CONN", "orbit_groq")
+    )
+    fixer_conn_id: str = field(
+        default_factory=lambda: os.getenv("ORBIT_FIXER_CONN", "orbit_groq")
+    )
+    reviewer_conn_id: str = field(
+        default_factory=lambda: os.getenv("ORBIT_REVIEWER_CONN", "orbit_mistral")
+    )
+    detector_model: str = field(
+        default_factory=lambda: os.getenv(
+            "ORBIT_DETECTOR_MODEL", "groq:llama-3.3-70b-versatile"
+        )
+    )
+    fixer_model: str = field(
+        default_factory=lambda: os.getenv(
+            "ORBIT_FIXER_MODEL", "groq:llama-3.3-70b-versatile"
+        )
+    )
+    # deliberately a different provider: a reviewer sharing the fixer's model
+    # shares its blind spots
+    reviewer_model: str = field(
+        default_factory=lambda: os.getenv(
+            "ORBIT_REVIEWER_MODEL", "mistral:mistral-large-latest"
+        )
+    )
+    max_agent_calls_per_incident: int = field(
+        default_factory=lambda: int(os.getenv("ORBIT_MAX_AGENT_CALLS", "6"))
+    )
+    max_prompt_chars: int = field(
+        default_factory=lambda: int(os.getenv("ORBIT_MAX_PROMPT_CHARS", "12000"))
+    )
     watched_dag_ids: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
