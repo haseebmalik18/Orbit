@@ -1,4 +1,4 @@
-from orbit.contracts import Diagnosis, ProposedPatch
+from orbit.contracts import Diagnosis, Edit, ProposedPatch
 from orbit.verifier.scope import changed_symbols, check_scope
 
 BEFORE = """
@@ -51,7 +51,10 @@ def _diagnosis(symbols):
 
 
 def _patch(files):
-    return ProposedPatch(unified_diff="", files_touched=files, rationale="r")
+    return ProposedPatch(
+        edits=[Edit(file=f, old_string="x", new_string="y") for f in files],
+        rationale="r",
+    )
 
 
 def _roots(tmp_path, before, after, name="m.py"):

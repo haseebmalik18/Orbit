@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from orbit.agents import stubs
-from orbit.contracts import Evidence, ProposedPatch
+from orbit.contracts import Edit, Evidence, ProposedPatch
 from orbit.verifier.bundle import PatchApplicationError, shadow_bundle
 
 
@@ -16,8 +16,10 @@ def _checksum(root: Path) -> str:
     return digest.hexdigest()
 
 
-def _patch(diff: str, files=("example.py",)) -> ProposedPatch:
-    return ProposedPatch(unified_diff=diff, files_touched=list(files), rationale="r")
+def _patch(old: str, new: str, file: str = "example.py") -> ProposedPatch:
+    return ProposedPatch(
+        edits=[Edit(file=file, old_string=old, new_string=new)], rationale="r"
+    )
 
 
 @pytest.fixture
@@ -38,23 +40,20 @@ def test_shadow_copy_is_isolated_from_source(source_root):
 
 def test_patch_is_applied_in_the_shadow_only(source_root):
     before = _checksum(source_root)
-    diff = "--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-VALUE = 1\n+VALUE = 2\n"
-    with shadow_bundle(source_root, _patch(diff)) as shadow:
+    with shadow_bundle(source_root, _patch("VALUE = 1", "VALUE = 2")) as shadow:
         assert (shadow / "example.py").read_text() == "VALUE = 2\n"
     assert _checksum(source_root) == before
 
 
 def test_unapplyable_patch_raises(source_root):
-    diff = "--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-NOPE = 0\n+NOPE = 1\n"
-    with pytest.raises(PatchApplicationError):
-        with shadow_bundle(source_root, _patch(diff)):
+    with pytest.raises(PatchApplicationError, match="not found"):
+        with shadow_bundle(source_root, _patch("NOPE = 0", "NOPE = 1")):
             pass
 
 
 def test_patch_producing_unparseable_python_raises(source_root):
-    diff = "--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-VALUE = 1\n+VALUE = (\n"
     with pytest.raises(PatchApplicationError, match="parse"):
-        with shadow_bundle(source_root, _patch(diff)):
+        with shadow_bundle(source_root, _patch("VALUE = 1", "VALUE = (")):
             pass
 
 
@@ -65,10 +64,9 @@ def test_shadow_is_cleaned_up(source_root):
 
 
 def test_shadow_is_cleaned_up_even_when_patch_fails(source_root):
-    diff = "--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-NOPE = 0\n+NOPE = 1\n"
     leaked = []
     try:
-        with shadow_bundle(source_root, _patch(diff)) as shadow:
+        with shadow_bundle(source_root, _patch("NOPE = 0", "NOPE = 1")) as shadow:
             leaked.append(shadow)
     except PatchApplicationError:
         pass

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from orbit.contracts import (
     Diagnosis,
+    Edit,
     Evidence,
     ProposedPatch,
     ReviewVerdict,
@@ -20,18 +21,11 @@ CATEGORY_BY_EXCEPTION = {
     "ValueError": "logic",
 }
 
-RENAME_PATCH = '''--- a/retail_etl.py
-+++ b/retail_etl.py
-@@ -37,7 +37,7 @@ def clean_orders_fn(rows: list[dict]) -> list[dict]:
-         cleaned.append(
-             {
-                 "order_id": row["order_id"],
--                "customer_id": row["customer_id"],
-+                "customer_id": row.get("customer_id", row.get("cust_id")),
-                 "order_date": row["order_date"],
-                 "amount": float(row["amount"]),
-             }
-'''
+RENAME_EDIT = Edit(
+    file="retail_etl.py",
+    old_string='"customer_id": row["customer_id"],',
+    new_string='"customer_id": row.get("customer_id", row.get("cust_id")),',
+)
 
 
 def diagnose(evidence: Evidence) -> Diagnosis:
@@ -47,8 +41,7 @@ def diagnose(evidence: Evidence) -> Diagnosis:
 
 def propose_fix(evidence: Evidence, diagnosis: Diagnosis) -> ProposedPatch:
     return ProposedPatch(
-        unified_diff=RENAME_PATCH,
-        files_touched=["retail_etl.py"],
+        edits=[RENAME_EDIT],
         rationale="Stubbed patch: tolerate the renamed column.",
     )
 

@@ -49,10 +49,30 @@ class Diagnosis(BaseModel):
     reasoning: str
 
 
+class Edit(BaseModel):
+    """One exact string replacement.
+
+    Models generate these far more reliably than unified diffs — no hunk
+    headers, no line arithmetic. The diff is rendered from them afterwards.
+    """
+
+    file: str
+    old_string: str
+    new_string: str
+
+
 class ProposedPatch(BaseModel):
-    unified_diff: str
-    files_touched: list[str]
+    edits: list[Edit]
     rationale: str
+
+    @computed_field
+    @property
+    def files_touched(self) -> list[str]:
+        seen: list[str] = []
+        for edit in self.edits:
+            if edit.file not in seen:
+                seen.append(edit.file)
+        return seen
 
 
 class CheckResult(BaseModel):

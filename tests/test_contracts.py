@@ -4,6 +4,7 @@ from orbit.contracts import (
     Case,
     CheckResult,
     Diagnosis,
+    Edit,
     Evidence,
     ProposedPatch,
     ReviewVerdict,
@@ -91,8 +92,13 @@ def test_contracts_roundtrip():
             reasoning="traceback shows KeyError",
         ),
         ProposedPatch(
-            unified_diff="--- a\n+++ b\n",
-            files_touched=["dags/retail_etl.py"],
+            edits=[
+                Edit(
+                    file="retail_etl.py",
+                    old_string='row["customer_id"]',
+                    new_string='row.get("customer_id")',
+                )
+            ],
             rationale="map the renamed column",
         ),
         ReviewVerdict(

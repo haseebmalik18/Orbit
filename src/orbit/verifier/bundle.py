@@ -2,29 +2,15 @@ from __future__ import annotations
 
 import ast
 import shutil
-import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
 from orbit.contracts import ProposedPatch
+from orbit.patch import PatchApplicationError, apply_edits
 
-
-class PatchApplicationError(RuntimeError):
-    """The patch would not apply, or produced unparseable Python."""
-
-
-def _apply_patch(shadow: Path, unified_diff: str) -> None:
-    result = subprocess.run(
-        ["git", "apply", "-p1", "-"],
-        input=unified_diff,
-        capture_output=True,
-        text=True,
-        cwd=shadow,
-    )
-    if result.returncode != 0:
-        raise PatchApplicationError(f"patch did not apply: {result.stderr.strip()}")
+__all__ = ["PatchApplicationError", "shadow_bundle"]
 
 
 def _assert_parses(shadow: Path) -> None:
@@ -49,7 +35,7 @@ def shadow_bundle(source_root: Path, patch: ProposedPatch | None) -> Iterator[Pa
     try:
         shutil.copytree(source_root, shadow)
         if patch is not None:
-            _apply_patch(shadow, patch.unified_diff)
+            apply_edits(shadow, patch)
             _assert_parses(shadow)
         yield shadow
     finally:

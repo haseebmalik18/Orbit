@@ -1,7 +1,7 @@
 from contextlib import nullcontext
 from pathlib import Path
 
-from orbit.contracts import Case, CheckResult, Diagnosis, Evidence, ProposedPatch
+from orbit.contracts import Case, CheckResult, Diagnosis, Edit, Evidence, ProposedPatch
 from orbit.verifier import runner
 from orbit.verifier.bundle import PatchApplicationError
 from orbit.verifier.replay import ReplayResult
@@ -27,7 +27,10 @@ def _evidence(cases=None) -> Evidence:
 
 
 def _patch() -> ProposedPatch:
-    return ProposedPatch(unified_diff="", files_touched=[], rationale="r")
+    return ProposedPatch(
+        edits=[Edit(file="retail_etl.py", old_string="x", new_string="y")],
+        rationale="r",
+    )
 
 
 def _diagnosis() -> Diagnosis:

@@ -1,9 +1,9 @@
 import shutil
-import subprocess
 from pathlib import Path
 
 from orbit.agents import stubs
 from orbit.contracts import CheckResult, Evidence, VerificationReport
+from orbit.patch import apply_edits, render_diff
 
 
 def _evidence(exception_type="KeyError") -> Evidence:
@@ -39,28 +39,32 @@ def test_diagnose_falls_back_to_unknown():
     assert stubs.diagnose(_evidence("OSError")).category == "unknown"
 
 
-def test_propose_fix_returns_a_unified_diff():
+def test_propose_fix_returns_a_scoped_edit():
     evidence = _evidence()
     patch = stubs.propose_fix(evidence, stubs.diagnose(evidence))
-    assert patch.unified_diff.startswith("---")
     assert patch.files_touched == ["retail_etl.py"]
+    assert len(patch.edits) == 1
 
 
 def test_stub_patch_actually_applies_to_the_real_dag(tmp_path):
-    """A malformed stub diff would silently break the verifier later."""
+    """A stale stub edit would silently break the verifier later."""
     bundle = tmp_path / "dags"
     shutil.copytree(Path("dags"), bundle)
     evidence = _evidence()
     patch = stubs.propose_fix(evidence, stubs.diagnose(evidence))
-    result = subprocess.run(
-        ["git", "apply", "-p1", "-"],
-        input=patch.unified_diff,
-        capture_output=True,
-        text=True,
-        cwd=bundle,
-    )
-    assert result.returncode == 0, result.stderr
+    apply_edits(bundle, patch)
     assert "cust_id" in (bundle / "retail_etl.py").read_text()
+
+
+def test_stub_patch_renders_a_readable_diff(tmp_path):
+    bundle = tmp_path / "dags"
+    shutil.copytree(Path("dags"), bundle)
+    evidence = _evidence()
+    patch = stubs.propose_fix(evidence, stubs.diagnose(evidence))
+    diff = render_diff(bundle, patch)
+    assert diff.startswith("--- a/retail_etl.py")
+    assert '-                "customer_id": row["customer_id"],' in diff
+    assert "+" in diff and "cust_id" in diff
 
 
 def test_review_agrees_when_all_checks_passed():
