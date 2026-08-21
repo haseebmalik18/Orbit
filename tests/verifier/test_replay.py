@@ -53,39 +53,56 @@ def test_output_is_found_amid_surrounding_log_noise(monkeypatch):
     assert result.output == [1, 2]
 
 
-def test_missing_sentinel_yields_none_output(monkeypatch):
+def test_missing_sentinel_means_the_task_did_not_complete(monkeypatch):
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **k: MockCompleted(0, "no sentinel here")
     )
     result = replay("d", "t", _case(), "/tmp/shadow", 10)
-    assert result.succeeded is True
+    assert result.succeeded is False
     assert result.output is None
 
 
-def test_failed_replay_captures_exception_type(monkeypatch):
-    stderr = "Traceback (most recent call last):\nKeyError: 'customer_id'\n"
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: MockCompleted(1, "", stderr))
+def test_task_failure_is_detected_despite_zero_exit_code(monkeypatch):
+    """`airflow tasks test` exits 0 even when the task raises, so the sentinel
+    is the only trustworthy completion signal."""
+    stdout = "[info] running\nKeyError: 'customer_id'\nnew_state=failed\n"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: MockCompleted(0, stdout, ""))
     result = replay("retail_etl", "clean_orders", _case(), "/tmp/shadow", 10)
     assert result.succeeded is False
     assert result.exception_type == "KeyError"
     assert result.output is None
 
 
-def test_failed_replay_reads_structured_json_logs(monkeypatch):
-    """Airflow 3.3 emits structured logs, so exc_type is available directly."""
-    stderr = '{"event":"task failed","exc_type":"ValueError","exc_value":"bad float"}'
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: MockCompleted(1, "", stderr))
-    result = replay("d", "t", _case(), "/tmp/shadow", 10)
-    assert result.exception_type == "ValueError"
+def test_exception_type_is_read_from_stdout(monkeypatch):
+    """Airflow 3.3 writes the traceback to stdout; stderr comes back empty."""
+    stdout = "Traceback (most recent call last):\nValueError: bad float\n"
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: MockCompleted(0, stdout, ""))
+    assert replay("d", "t", _case(), "/tmp/shadow", 10).exception_type == "ValueError"
 
 
-def test_unrecognisable_failure_yields_none_exception_type(monkeypatch):
+def test_structured_json_exception_is_read(monkeypatch):
+    stdout = '{"event":"task failed","exc_type":"TypeError","exc_value":"nope"}'
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: MockCompleted(0, stdout, ""))
+    assert replay("d", "t", _case(), "/tmp/shadow", 10).exception_type == "TypeError"
+
+
+def test_nonzero_exit_without_sentinel_is_a_failure(monkeypatch):
     monkeypatch.setattr(
         subprocess, "run", lambda *a, **k: MockCompleted(1, "", "segfault")
     )
     result = replay("d", "t", _case(), "/tmp/shadow", 10)
     assert result.succeeded is False
     assert result.exception_type is None
+
+
+def test_sentinel_with_null_payload_still_counts_as_success(monkeypatch):
+    """A task returning None completed; it did not fail."""
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: MockCompleted(0, _payload(None), "")
+    )
+    result = replay("d", "t", _case(), "/tmp/shadow", 10)
+    assert result.succeeded is True
+    assert result.output is None
 
 
 def test_timeout_is_recorded_not_raised(monkeypatch):

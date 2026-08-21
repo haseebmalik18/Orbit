@@ -138,10 +138,13 @@ def replay(
         shutil.rmtree(scratch, ignore_errors=True)
 
     duration_ms = int((time.perf_counter() - started) * 1000)
-    succeeded = completed.returncode == 0
+    # `airflow tasks test` exits 0 even when the task raises, so the sentinel
+    # is the only trustworthy signal that the task body ran to completion
+    succeeded = RESULT_START in completed.stdout and RESULT_END in completed.stdout
+    streams = completed.stdout + completed.stderr
     return ReplayResult(
         succeeded=succeeded,
-        exception_type=None if succeeded else _extract_exception_type(completed.stderr),
+        exception_type=None if succeeded else _extract_exception_type(streams),
         output=_extract_output(completed.stdout) if succeeded else None,
         stdout=completed.stdout,
         stderr=completed.stderr,
