@@ -64,6 +64,12 @@ def _replay_inputs() -> dict:
     return json.loads(os.environ["ORBIT_REPLAY_INPUTS"])
 
 
+def _resolve_rows(rows):
+    """`airflow tasks test` runs one task alone, so its upstream XCom resolves
+    to None. In replay the recorded inputs stand in for it."""
+    return _replay_inputs()["rows"] if _replaying() else rows
+
+
 def _emit(value) -> None:
     """Hand the task's return value back to the verifier through stdout."""
     if _replaying():
@@ -88,13 +94,13 @@ def retail_etl():
 
     @task
     def clean_orders(rows: list[dict]) -> list[dict]:
-        result = clean_orders_fn(rows)
+        result = clean_orders_fn(_resolve_rows(rows))
         _emit(result)
         return result
 
     @task
     def aggregate_daily(rows: list[dict]) -> dict:
-        result = aggregate_daily_fn(rows)
+        result = aggregate_daily_fn(_resolve_rows(rows))
         _emit(result)
         return result
 

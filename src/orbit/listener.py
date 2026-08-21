@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from airflow.listeners import hookimpl
@@ -45,6 +46,10 @@ def on_task_instance_failed(previous_state, task_instance, error) -> None:
     Orbit must never affect the user's task teardown.
     """
     try:
+        # the verifier replays failing tasks on purpose; recording those would
+        # open an incident per replay, each triggering more replays
+        if os.getenv("ORBIT_REPLAY_MODE") == "1":
+            return
         dag_id = getattr(task_instance, "dag_id", None)
         if dag_id == REMEDIATION_DAG_ID:
             return

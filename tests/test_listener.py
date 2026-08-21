@@ -93,6 +93,27 @@ def test_orbit_own_dag_never_creates_incident(wired):
     assert client.calls == []
 
 
+def test_replay_failures_never_create_incidents(wired, monkeypatch):
+    """The verifier replays failing tasks on purpose. Without this guard every
+    replay opens an incident, which triggers another replay."""
+    repo, client = wired
+    monkeypatch.setenv("ORBIT_REPLAY_MODE", "1")
+    listener.on_task_instance_failed(
+        previous_state=None, task_instance=_ti(), error=KeyError("customer_id")
+    )
+    assert repo.list_incidents() == []
+    assert client.calls == []
+
+
+def test_listener_still_fires_outside_replay_mode(wired, monkeypatch):
+    repo, _ = wired
+    monkeypatch.delenv("ORBIT_REPLAY_MODE", raising=False)
+    listener.on_task_instance_failed(
+        previous_state=None, task_instance=_ti(), error=KeyError("customer_id")
+    )
+    assert len(repo.list_incidents()) == 1
+
+
 def test_listener_swallows_its_own_exceptions(monkeypatch):
     def explode():
         raise RuntimeError("store is down")

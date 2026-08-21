@@ -1,8 +1,20 @@
 import json
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from orbit.contracts import Case
 from orbit.verifier.replay import replay
+
+
+@pytest.fixture(autouse=True)
+def stub_template_db(monkeypatch, tmp_path):
+    """Keep every test off the real `airflow db migrate`."""
+    template = tmp_path / "template.db"
+    template.write_bytes(b"pretend sqlite")
+    monkeypatch.setattr("orbit.verifier.replay._ensure_template_db", lambda: template)
+    return template
 
 
 class MockCompleted:
@@ -102,6 +114,39 @@ def test_bundle_env_points_at_the_shadow(monkeypatch):
     assert "/tmp/shadow-xyz" in bundle_config
     assert "LocalDagBundle" in bundle_config
     assert json.loads(bundle_config)[0]["kwargs"]["path"] == "/tmp/shadow-xyz"
+
+
+def test_replay_uses_a_throwaway_metadata_db(monkeypatch):
+    """`airflow tasks test` writes task_instance rows, so it must not be
+    pointed at the production metadata database."""
+    monkeypatch.setenv(
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN", "postgresql://prod/airflow"
+    )
+    captured = {}
+
+    def capture(cmd, **kwargs):
+        captured["env"] = kwargs["env"]
+        return MockCompleted(0, _payload(None))
+
+    monkeypatch.setattr(subprocess, "run", capture)
+    replay("d", "t", _case(), "/tmp/shadow", 10)
+
+    conn = captured["env"]["AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"]
+    assert conn.startswith("sqlite:///")
+    assert "prod" not in conn
+
+
+def test_scratch_db_is_removed_after_replay(monkeypatch):
+    captured = {}
+
+    def capture(cmd, **kwargs):
+        conn = kwargs["env"]["AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"]
+        captured["path"] = conn.removeprefix("sqlite:///")
+        return MockCompleted(0, _payload(None))
+
+    monkeypatch.setattr(subprocess, "run", capture)
+    replay("d", "t", _case(), "/tmp/shadow", 10)
+    assert not Path(captured["path"]).exists()
 
 
 def test_command_is_airflow_tasks_test(monkeypatch):

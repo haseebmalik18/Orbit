@@ -1,14 +1,23 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from orbit.contracts import Case
+
+log = logging.getLogger(__name__)
+
+TEMPLATE_DB = Path(tempfile.gettempdir()) / "orbit-replay-template.db"
+MIGRATE_TIMEOUT_S = 300
 
 RESULT_START = "__ORBIT_RESULT__"
 RESULT_END = "__ORBIT_END__"
@@ -54,6 +63,32 @@ def _extract_exception_type(stderr: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _ensure_template_db() -> Path:
+    """Build a migrated SQLite metadata DB once, then copy it per replay.
+
+    `airflow tasks test` writes task_instance rows, so replays get their own
+    throwaway database. Migrating takes ~20s, copying takes no time.
+    """
+    if TEMPLATE_DB.exists():
+        return TEMPLATE_DB
+    env = {
+        **os.environ,
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": f"sqlite:///{TEMPLATE_DB}",
+        "AIRFLOW__CORE__EXECUTOR": "SequentialExecutor",
+    }
+    result = subprocess.run(
+        ["airflow", "db", "migrate"],
+        capture_output=True,
+        text=True,
+        timeout=MIGRATE_TIMEOUT_S,
+        env=env,
+    )
+    if result.returncode != 0:
+        TEMPLATE_DB.unlink(missing_ok=True)
+        raise RuntimeError(f"could not build replay metadata db: {result.stderr[-500:]}")
+    return TEMPLATE_DB
+
+
 def replay(
     dag_id: str,
     task_id: str,
@@ -66,9 +101,15 @@ def replay(
     Uses `airflow tasks test`, which runs a single task with no dependency
     checks and writes nothing to the metadata database.
     """
+    scratch = Path(tempfile.mkdtemp(prefix="orbit-replaydb-"))
+    scratch_db = scratch / "replay.db"
+    shutil.copy(_ensure_template_db(), scratch_db)
+
     env = {
         **os.environ,
         "AIRFLOW__DAG_PROCESSOR__DAG_BUNDLE_CONFIG_LIST": _bundle_config(shadow_root),
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN": f"sqlite:///{scratch_db}",
+        "AIRFLOW__CORE__EXECUTOR": "SequentialExecutor",
         "ORBIT_REPLAY_INPUTS": json.dumps(case.inputs),
         "ORBIT_REPLAY_MODE": "1",
     }
@@ -93,6 +134,8 @@ def replay(
             duration_ms=int((time.perf_counter() - started) * 1000),
             timed_out=True,
         )
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
     duration_ms = int((time.perf_counter() - started) * 1000)
     succeeded = completed.returncode == 0
