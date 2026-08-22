@@ -25,6 +25,6 @@ fixtures/*.duckdb
 # Planning artifacts, not part of the deliverable
 orbit_project_plan.md
 README.md
-docs/superpowers/
+docs/
 
 .orbit/

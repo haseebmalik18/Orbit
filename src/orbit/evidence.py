@@ -79,11 +79,19 @@ def collect(incident_id, repo, client, dag_source_root: Path) -> Evidence:
             except Exception:
                 log.warning("Skipping unusable regression case %s", run_id)
 
+    params: dict = {}
+    try:
+        params = client.get_dag_params(dag_id)
+    except Exception:
+        log.warning("Could not read params for %s; treating as not replayable", dag_id)
+
     return Evidence(
         incident_id=incident_id,
         dag_id=dag_id,
         task_id=task_id,
         run_id=incident["run_id"],
+        replayable=bool(params.get("orbit_replayable", False)),
+        volatile_fields=list(params.get("orbit_volatile_fields") or []),
         exception_type=incident["exception_type"],
         exception_message=incident["exception_message"],
         log_tail=log_tail,

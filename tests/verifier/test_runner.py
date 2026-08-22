@@ -9,7 +9,7 @@ from orbit.verifier.replay import ReplayResult
 SOURCE = Path("dags")
 
 
-def _evidence(cases=None) -> Evidence:
+def _evidence(cases=None, replayable=True, volatile=None) -> Evidence:
     return Evidence(
         incident_id="inc-1",
         dag_id="retail_etl",
@@ -23,6 +23,8 @@ def _evidence(cases=None) -> Evidence:
         git_diff_since_green=None,
         failing_inputs={"rows": [{"cust_id": "C001"}]},
         regression_cases=cases if cases is not None else [],
+        replayable=replayable,
+        volatile_fields=volatile or [],
     )
 
 
@@ -165,6 +167,34 @@ def test_volatile_fields_are_honoured_in_regression(monkeypatch):
     )
     assert _check(report, "regression").status == "pass"
     assert report.all_passed is True
+
+
+def test_a_task_that_did_not_opt_in_is_never_verified(monkeypatch):
+    """Skipping is not passing — this must escalate, not silently approve."""
+    _install(monkeypatch, [])
+    report = runner.verify(
+        _evidence([_case()], replayable=False), _patch(), _diagnosis(), SOURCE
+    )
+    assert report.all_passed is False
+    assert all(c.status == "skipped" for c in report.checks)
+    assert "orbit_replayable" in str(_check(report, "repro").detail)
+
+
+def test_opt_out_makes_no_replay_calls(monkeypatch):
+    """Not opting in should cost nothing — no subprocesses, no bundles."""
+    calls = []
+    monkeypatch.setattr(runner, "replay", lambda *a, **k: calls.append(1))
+    runner.verify(_evidence(replayable=False), _patch(), _diagnosis(), SOURCE)
+    assert calls == []
+
+
+def test_volatile_fields_come_from_evidence_when_not_overridden(monkeypatch):
+    case = _case(expected={"row_count": 8, "at": "old"})
+    _install(monkeypatch, [_fail(), _ok(), _ok({"row_count": 8, "at": "new"})])
+    report = runner.verify(
+        _evidence([case], volatile=["at"]), _patch(), _diagnosis(), SOURCE
+    )
+    assert _check(report, "regression").status == "pass"
 
 
 def test_every_check_is_always_present(monkeypatch):

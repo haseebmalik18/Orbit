@@ -149,6 +149,32 @@ def test_list_successful_runs_returns_run_ids_newest_first(monkeypatch):
     ]
 
 
+def test_get_dag_params_unwraps_param_values(monkeypatch):
+    """Airflow returns params as {name: {value, schema, description}}."""
+    payload = {
+        "params": {
+            "orbit_replayable": {"value": True, "description": None},
+            "orbit_volatile_fields": {"value": ["processed_at"], "description": None},
+        }
+    }
+    monkeypatch.setattr(requests, "get", lambda *a, **k: MockResponse(200, payload))
+    assert _client().get_dag_params("retail_etl") == {
+        "orbit_replayable": True,
+        "orbit_volatile_fields": ["processed_at"],
+    }
+
+
+def test_get_dag_params_tolerates_bare_values(monkeypatch):
+    payload = {"params": {"orbit_replayable": True}}
+    monkeypatch.setattr(requests, "get", lambda *a, **k: MockResponse(200, payload))
+    assert _client().get_dag_params("d") == {"orbit_replayable": True}
+
+
+def test_get_dag_params_returns_empty_when_absent(monkeypatch):
+    monkeypatch.setattr(requests, "get", lambda *a, **k: MockResponse(200, {}))
+    assert _client().get_dag_params("d") == {}
+
+
 def test_get_task_log_splits_string_content(monkeypatch):
     monkeypatch.setattr(
         requests, "get", lambda *a, **k: MockResponse(200, {"content": "a\nb\nc"})

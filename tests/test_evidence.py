@@ -9,10 +9,14 @@ DAGS = Path("dags")
 
 
 class MockClient:
-    def __init__(self, successful=None, outputs=None, log_lines=500):
+    def __init__(self, successful=None, outputs=None, log_lines=500, params=None):
         self.successful = successful or []
         self.outputs = outputs or {}
         self.log_lines = log_lines
+        self.params = params if params is not None else {"orbit_replayable": True}
+
+    def get_dag_params(self, dag_id):
+        return self.params
 
     def get_task_log(self, dag_id, run_id, task_id, try_number):
         return [f"line {i}" for i in range(self.log_lines)]
@@ -111,6 +115,35 @@ def test_collect_captures_failing_inputs_from_upstream(tmp_path):
     repo, incident_id = _repo_with_incident(tmp_path)
     evidence = collect(incident_id, repo, client, DAGS)
     assert evidence.failing_inputs == {"rows": [{"cust_id": "C001"}]}
+
+
+def test_collect_reads_replayable_and_volatile_from_dag_params(tmp_path):
+    repo, incident_id = _repo_with_incident(tmp_path)
+    client = MockClient(
+        params={"orbit_replayable": True, "orbit_volatile_fields": ["processed_at"]}
+    )
+    evidence = collect(incident_id, repo, client, DAGS)
+    assert evidence.replayable is True
+    assert evidence.volatile_fields == ["processed_at"]
+
+
+def test_collect_defaults_to_not_replayable(tmp_path):
+    repo, incident_id = _repo_with_incident(tmp_path)
+    evidence = collect(incident_id, repo, MockClient(params={}), DAGS)
+    assert evidence.replayable is False
+    assert evidence.volatile_fields == []
+
+
+def test_unreadable_params_mean_not_replayable(tmp_path):
+    """Failing closed: if we cannot confirm opt-in, we do not replay."""
+
+    class MockNoParamsClient(MockClient):
+        def get_dag_params(self, dag_id):
+            raise RuntimeError("api down")
+
+    repo, incident_id = _repo_with_incident(tmp_path)
+    evidence = collect(incident_id, repo, MockNoParamsClient(), DAGS)
+    assert evidence.replayable is False
 
 
 def test_collect_raises_on_unknown_incident(tmp_path):

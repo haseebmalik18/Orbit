@@ -30,6 +30,9 @@ class Evidence(BaseModel):
     git_diff_since_green: str | None
     failing_inputs: dict[str, Any]
     regression_cases: list[Case]
+    # from the failing DAG's params; a task that does not opt in is never replayed
+    replayable: bool = False
+    volatile_fields: list[str] = []
 
 
 class Diagnosis(BaseModel):

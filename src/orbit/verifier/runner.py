@@ -5,6 +5,7 @@ from pathlib import Path
 
 from orbit.config import settings
 from orbit.contracts import (
+    REQUIRED_CHECKS,
     Case,
     CheckResult,
     Diagnosis,
@@ -40,8 +41,19 @@ def verify(
     volatile_fields: list[str] | None = None,
 ) -> VerificationReport:
     """Run the four checks. Never raises; failures become failed checks."""
-    volatile = volatile_fields or []
+    volatile = volatile_fields if volatile_fields is not None else evidence.volatile_fields
     checks: list[CheckResult] = []
+
+    # A task that cannot be replayed is never treated as verified. Skipping is
+    # not passing, so this routes to escalation rather than silently approving.
+    if not evidence.replayable:
+        reason = "task did not opt in with orbit_replayable=True"
+        return VerificationReport(
+            checks=[_skipped(n, reason) for n in REQUIRED_CHECKS],
+            regression_passed=0,
+            regression_total=0,
+        )
+
     failing_case = Case(
         run_id=evidence.run_id, inputs=evidence.failing_inputs, expected_output=None
     )

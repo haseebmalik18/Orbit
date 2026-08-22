@@ -97,6 +97,24 @@ class AirflowClient:
         response.raise_for_status()
         return [r["dag_run_id"] for r in response.json()["dag_runs"]]
 
+    def get_dag_params(self, dag_id: str) -> dict[str, Any]:
+        """Read a DAG's declared params.
+
+        Airflow wraps each one as {value, schema, description}; older shapes
+        return the bare value, so handle both.
+        """
+        response = requests.get(
+            f"{self.api_url}/dags/{dag_id}/details",
+            headers=self._headers(),
+            timeout=TIMEOUT_S,
+        )
+        response.raise_for_status()
+        params = response.json().get("params") or {}
+        return {
+            name: spec["value"] if isinstance(spec, dict) and "value" in spec else spec
+            for name, spec in params.items()
+        }
+
     def get_task_log(
         self, dag_id: str, run_id: str, task_id: str, try_number: int
     ) -> list[str]:
