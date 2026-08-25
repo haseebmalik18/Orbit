@@ -39,19 +39,19 @@ def _client() -> AirflowClient:
 
 
 def _stub_agent_tasks():
-    @task
+    @task(multiple_outputs=False)
     def diagnose(evidence: dict) -> dict:
         check_and_count(_repo(), evidence["incident_id"], "detector")
         return stubs.diagnose(Evidence.model_validate(evidence)).model_dump()
 
-    @task
+    @task(multiple_outputs=False)
     def propose_fix(evidence: dict, diagnosis: dict) -> dict:
         check_and_count(_repo(), evidence["incident_id"], "fixer")
         return stubs.propose_fix(
             Evidence.model_validate(evidence), Diagnosis.model_validate(diagnosis)
         ).model_dump()
 
-    @task
+    @task(multiple_outputs=False)
     def review(evidence: dict, diagnosis: dict, patch: dict, report: dict) -> dict:
         check_and_count(_repo(), evidence["incident_id"], "reviewer")
         return stubs.review(
@@ -115,7 +115,7 @@ def _llm_agent_tasks():
     tags=["orbit"],
 )
 def orbit_remediation():
-    @task
+    @task(multiple_outputs=False)
     def collect_evidence(**context) -> dict:
         incident_id = context["dag_run"].conf["incident_id"]
         repo = _repo()
@@ -135,30 +135,32 @@ def orbit_remediation():
             "reviewer": settings.reviewer_model,
         }[agent]
 
-    @task
-    def record_diagnosis(evidence: dict, diagnosis: dict) -> dict:
+    @task(multiple_outputs=False)
+    def record_diagnosis(evidence: dict, diagnosis) -> dict:
+        parsed = Diagnosis.model_validate(diagnosis)
         _repo().add_message(
             evidence["incident_id"],
             "detector",
             "assistant",
-            Diagnosis.model_validate(diagnosis).reasoning,
+            parsed.reasoning,
             _model_for("detector"),
         )
-        return diagnosis
+        return parsed.model_dump()
 
-    @task
-    def record_patch(evidence: dict, patch: dict) -> dict:
+    @task(multiple_outputs=False)
+    def record_patch(evidence: dict, patch) -> dict:
+        parsed = ProposedPatch.model_validate(patch)
         _repo().add_message(
             evidence["incident_id"],
             "fixer",
             "assistant",
-            ProposedPatch.model_validate(patch).rationale,
+            parsed.rationale,
             _model_for("fixer"),
         )
-        return patch
+        return parsed.model_dump()
 
-    @task
-    def record_review(evidence: dict, verdict: dict) -> dict:
+    @task(multiple_outputs=False)
+    def record_review(evidence: dict, verdict) -> dict:
         parsed = ReviewVerdict.model_validate(verdict)
         content = parsed.reasoning
         if parsed.disagreements:
@@ -170,9 +172,9 @@ def orbit_remediation():
             content,
             _model_for("reviewer"),
         )
-        return verdict
+        return parsed.model_dump()
 
-    @task
+    @task(multiple_outputs=False)
     def verify(evidence: dict, patch: dict, diagnosis: dict) -> dict:
         repo = _repo()
         evidence_model = Evidence.model_validate(evidence)

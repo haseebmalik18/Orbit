@@ -62,12 +62,12 @@ class Settings:
     )
     detector_model: str = field(
         default_factory=lambda: os.getenv(
-            "ORBIT_DETECTOR_MODEL", "groq:llama-3.3-70b-versatile"
+            "ORBIT_DETECTOR_MODEL", "groq:openai/gpt-oss-120b"
         )
     )
     fixer_model: str = field(
         default_factory=lambda: os.getenv(
-            "ORBIT_FIXER_MODEL", "groq:llama-3.3-70b-versatile"
+            "ORBIT_FIXER_MODEL", "groq:openai/gpt-oss-120b"
         )
     )
     # deliberately a different provider: a reviewer sharing the fixer's model
