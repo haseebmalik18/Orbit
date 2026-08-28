@@ -40,6 +40,34 @@ def test_missing_old_string_raises(root):
         apply_edits(root, _patch("this text is absent", "x"))
 
 
+def test_wrong_indentation_still_applies(root):
+    """Models routinely reproduce a line with the wrong leading whitespace.
+    Match on content, then splice using the real source text."""
+    apply_edits(
+        root,
+        _patch(
+            '            out.append({"id": row["id"], "amount": float(row["amount"])})',
+            '            out.append({"id": row.get("id"), "amount": float(row["amount"])})',
+        ),
+    )
+    text = (root / "m.py").read_text()
+    assert 'row.get("id")' in text
+    # the replacement keeps the file's own indentation, not the model's
+    assert '\n        out.append({"id": row.get("id")' in text
+
+
+def test_indentation_fallback_still_requires_uniqueness(root):
+    (root / "dup.py").write_text("    a = 1\n    a = 1\n")
+    with pytest.raises(PatchApplicationError, match="expected 1"):
+        apply_edits(root, _patch("a = 1", "a = 2", file="dup.py"))
+
+
+def test_exact_match_wins_over_the_fallback(root):
+    """A line that matches exactly must not be re-resolved by content."""
+    apply_edits(root, _patch("    return out", "    return sorted(out)"))
+    assert "    return sorted(out)" in (root / "m.py").read_text()
+
+
 def test_ambiguous_old_string_raises(root):
     """Multiple matches mean we cannot know which one the model meant."""
     with pytest.raises(PatchApplicationError, match="expected 1"):

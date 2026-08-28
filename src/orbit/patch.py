@@ -10,22 +10,75 @@ class PatchApplicationError(RuntimeError):
     """An edit did not match, matched ambiguously, or produced bad Python."""
 
 
+def _reindent(block: str, source_lines: list[str], start: int) -> str:
+    """Re-anchor a block to the file's own indentation.
+
+    Keeps each line's indentation *relative* to the block's first line, so a
+    multi-line edit stays internally consistent.
+    """
+    block_lines = block.split("\n")
+    shift = len(source_lines[start]) - len(source_lines[start].lstrip())
+    shift -= len(block_lines[0]) - len(block_lines[0].lstrip())
+    out = []
+    for line in block_lines:
+        if not line.strip():
+            out.append(line)
+        elif shift >= 0:
+            out.append(" " * shift + line)
+        else:
+            out.append(line[-shift:] if line[:-shift].isspace() else line.lstrip())
+    return "\n".join(out)
+
+
+def _locate_ignoring_indent(text: str, old: str) -> tuple[str, str] | None:
+    """Find `old` ignoring leading whitespace on every line.
+
+    Models frequently reproduce a line with the wrong indentation. Match on
+    content, then splice using the text actually in the file.
+    """
+    source_lines = text.split("\n")
+    wanted = [line.strip() for line in old.split("\n")]
+    matches = [
+        i
+        for i in range(len(source_lines) - len(wanted) + 1)
+        if [line.strip() for line in source_lines[i : i + len(wanted)]] == wanted
+    ]
+    if len(matches) != 1:
+        return None if not matches else ("", "")
+    start = matches[0]
+    return "\n".join(source_lines[start : start + len(wanted)]), str(start)
+
+
 def _edited_text(root: Path, file: str, original: str, edits) -> str:
     text = original
     for edit in edits:
-        occurrences = text.count(edit.old_string)
+        if edit.old_string == edit.new_string:
+            raise PatchApplicationError(f"{file}: old_string and new_string identical")
+
+        old, new = edit.old_string, edit.new_string
+        occurrences = text.count(old)
+
         if occurrences == 0:
-            raise PatchApplicationError(
-                f"{file}: old_string not found: {edit.old_string[:60]!r}"
-            )
+            located = _locate_ignoring_indent(text, old)
+            if located is None:
+                raise PatchApplicationError(
+                    f"{file}: old_string not found: {old[:60]!r}"
+                )
+            actual, start = located
+            if not actual:
+                raise PatchApplicationError(
+                    f"{file}: old_string matched several places ignoring indentation, "
+                    f"expected 1: {old[:60]!r}"
+                )
+            new = _reindent(new, text.split("\n"), int(start))
+            old, occurrences = actual, 1
+
         if occurrences > 1:
             raise PatchApplicationError(
                 f"{file}: old_string matched {occurrences} times, expected 1: "
-                f"{edit.old_string[:60]!r}"
+                f"{old[:60]!r}"
             )
-        if edit.old_string == edit.new_string:
-            raise PatchApplicationError(f"{file}: old_string and new_string identical")
-        text = text.replace(edit.old_string, edit.new_string, 1)
+        text = text.replace(old, new, 1)
     return text
 
 
