@@ -79,6 +79,16 @@ def test_real_mode_builds_llm_operators(monkeypatch):
         assert "LLM" in type(dag.get_task(agent)).__name__.upper(), agent
 
 
+def test_llm_tasks_retry_but_verify_does_not(monkeypatch):
+    """Providers 503 under load, so agent calls retry. Replay is deterministic
+    and expensive — retrying it doubles the cost and changes nothing."""
+    monkeypatch.setattr("orbit.config.settings.use_stub_agents", False)
+    dag = DagBag(dag_folder="dags").dags["orbit_remediation"]
+    for agent in ("diagnose", "propose_fix", "review"):
+        assert dag.get_task(agent).retries >= 2, agent
+    assert dag.get_task("verify").retries == 0
+
+
 def test_verify_is_never_an_llm_call(monkeypatch):
     """If an LLM graded its own patch, "verified" would mean nothing."""
     for stub_mode in (True, False):

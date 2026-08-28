@@ -78,7 +78,7 @@ class Settings:
         )
     )
     max_agent_calls_per_incident: int = field(
-        default_factory=lambda: int(os.getenv("ORBIT_MAX_AGENT_CALLS", "6"))
+        default_factory=lambda: int(os.getenv("ORBIT_MAX_AGENT_CALLS", "9"))
     )
     max_prompt_chars: int = field(
         default_factory=lambda: int(os.getenv("ORBIT_MAX_PROMPT_CHARS", "12000"))

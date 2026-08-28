@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pendulum
@@ -65,13 +66,19 @@ def _stub_agent_tasks():
 
 def _llm_agent_tasks():
     """Real agents. The decorated body returns the prompt; `output_type` puts
-    the parsed object straight into XCom."""
+    the parsed object straight into XCom.
+
+    Providers 503 under load, so every agent call retries. The budget guard
+    counts each attempt, which keeps a retry storm bounded.
+    """
+    retry = {"retries": 2, "retry_delay": timedelta(seconds=15)}
 
     @task.llm(
         llm_conn_id=settings.detector_conn_id,
         model_id=settings.detector_model,
         system_prompt=prompts.DETECTOR_SYSTEM,
         output_type=Diagnosis,
+        **retry,
     )
     def diagnose(evidence: dict) -> str:
         check_and_count(_repo(), evidence["incident_id"], "detector")
@@ -82,6 +89,7 @@ def _llm_agent_tasks():
         model_id=settings.fixer_model,
         system_prompt=prompts.FIXER_SYSTEM,
         output_type=ProposedPatch,
+        **retry,
     )
     def propose_fix(evidence: dict, diagnosis: dict) -> str:
         check_and_count(_repo(), evidence["incident_id"], "fixer")
@@ -94,6 +102,7 @@ def _llm_agent_tasks():
         model_id=settings.reviewer_model,
         system_prompt=prompts.REVIEWER_SYSTEM,
         output_type=ReviewVerdict,
+        **retry,
     )
     def review(evidence: dict, diagnosis: dict, patch: dict, report: dict) -> str:
         check_and_count(_repo(), evidence["incident_id"], "reviewer")
