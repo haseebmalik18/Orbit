@@ -82,6 +82,33 @@ def test_an_unreachable_airflow_denies_rather_than_allows(client, monkeypatch):
     assert response.status_code == 401
 
 
+def test_a_session_cookie_airflow_accepts_is_allowed(client, monkeypatch):
+    """The panel runs in the browser and sends a cookie, not a bearer token."""
+    monkeypatch.setattr(requests, "get", lambda *a, **k: MockResponse(200))
+    client.cookies.set("session", "airflow-session-value")
+    assert client.get("/api/incidents").status_code == 200
+
+
+def test_a_session_cookie_airflow_rejects_is_denied(client, monkeypatch):
+    monkeypatch.setattr(requests, "get", lambda *a, **k: MockResponse(401))
+    client.cookies.set("session", "stale-session")
+    assert client.get("/api/incidents").status_code == 401
+
+
+def test_cookies_are_forwarded_upstream(client, monkeypatch):
+    """Airflow can only judge the session if we actually send it."""
+    captured = {}
+
+    def capture(*args, **kwargs):
+        captured["cookies"] = kwargs.get("cookies")
+        return MockResponse(200)
+
+    monkeypatch.setattr(requests, "get", capture)
+    client.cookies.set("session", "abc123")
+    client.get("/api/incidents")
+    assert captured["cookies"]["session"] == "abc123"
+
+
 def test_a_verified_token_is_cached(client, monkeypatch):
     """One upstream call per token, not one per request."""
     calls = []
