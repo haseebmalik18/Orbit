@@ -25,6 +25,9 @@ def get_repository() -> Repository:
 def _token_is_valid(token: str) -> bool:
     """Ask Airflow whether it accepts this token.
 
+    Verified against /api/v2/dags rather than /api/v2/version: the version
+    endpoint is public, so it accepts anything and proves nothing.
+
     Plugin endpoints carry no auth of their own, and Orbit's serve source code
     and diffs. Verifying upstream means we never invent our own notion of who
     is allowed in. Results are cached so this is one call per token, not one
@@ -36,7 +39,8 @@ def _token_is_valid(token: str) -> bool:
         return True
     try:
         response = requests.get(
-            f"{settings.airflow_base_url}/api/v2/version",
+            f"{settings.airflow_base_url}/api/v2/dags",
+            params={"limit": 1},
             headers={"Authorization": f"Bearer {token}"},
             timeout=VERIFY_TIMEOUT_S,
         )

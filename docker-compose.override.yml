@@ -4,12 +4,22 @@ x-orbit-volumes: &orbit-volumes
   # scheduler writes incidents, api-server reads them: needs to be one file
   - ./.orbit:/usr/local/airflow/.orbit:rw
 
+# Astro's compose sets all_admins=True so local dev needs no login. Orbit is
+# mounted inside the api-server and inherits that, which would leave its
+# endpoints open. Turn it off so auth is actually exercised.
+x-orbit-env: &orbit-env
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "False"
+
 services:
   scheduler:
     volumes: *orbit-volumes
+    environment: *orbit-env
   dag-processor:
     volumes: *orbit-volumes
+    environment: *orbit-env
   api-server:
     volumes: *orbit-volumes
+    environment: *orbit-env
   triggerer:
     volumes: *orbit-volumes
+    environment: *orbit-env
