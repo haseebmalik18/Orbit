@@ -71,6 +71,37 @@ def test_scoped_mode_has_its_own_empty_state():
     assert "No Orbit incident" in html
 
 
+def test_the_replay_count_is_drawn_not_just_counted():
+    """How many recorded runs survived the patch is the argument Orbit makes.
+    It comes off the regression check's own detail, never a constant."""
+    html = PANEL.read_text()
+    assert "replayStrip" in html
+    assert "d.total" in html and "d.passed" in html
+
+
+def test_the_replay_strip_is_labelled_for_screen_readers():
+    html = PANEL.read_text()
+    assert 'role="img"' in html and "aria-label" in html
+
+
+def test_the_verdict_states_the_outcome_in_words():
+    html = PANEL.read_text()
+    assert "Proved" in html and "Not proved" in html
+
+
+def test_durations_are_drawn_to_a_shared_scale():
+    """Bars scaled per-row instead of against the slowest check would make a
+    0.0s scope check look as expensive as a 25s replay."""
+    html = PANEL.read_text()
+    assert "longest" in html
+
+
+def test_record_column_is_width_capped():
+    """Uncapped, a findings row strands its verdict a screen from its label."""
+    html = PANEL.read_text()
+    assert ".wrap" in html and "max-width" in html
+
+
 def test_poll_interval_meets_the_two_second_freshness_bar():
     import re
 

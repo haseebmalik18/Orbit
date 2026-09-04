@@ -19,6 +19,10 @@
     --bad:       #c0362c;
     --hold:      #9a6b0f;
     --tint:      rgba(79, 70, 199, .07);
+    --good-tint: rgba(29, 122, 69, .10);
+    --bad-tint:  rgba(192, 54, 44, .10);
+    --hold-tint: rgba(154, 107, 15, .11);
+    --track:     rgba(13, 21, 25, .07);
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -27,7 +31,11 @@
       --rule: #222e36; --rule-soft: #1b252b;
       --ink: #eaf0f3; --ink-muted: #8ea0ac; --ink-faint: #63737f;
       --signal: #8079e8; --good: #35a866; --bad: #e2604f; --hold: #b8842a;
-      --tint: rgba(128, 121, 232, .12);
+      --tint: rgba(128, 121, 232, .13);
+      --good-tint: rgba(53, 168, 102, .14);
+      --bad-tint: rgba(226, 96, 79, .14);
+      --hold-tint: rgba(184, 132, 42, .15);
+      --track: rgba(234, 240, 243, .09);
     }
   }
   :root[data-theme="dark"] {
@@ -36,7 +44,11 @@
     --rule: #222e36; --rule-soft: #1b252b;
     --ink: #eaf0f3; --ink-muted: #8ea0ac; --ink-faint: #63737f;
     --signal: #8079e8; --good: #35a866; --bad: #e2604f; --hold: #b8842a;
-    --tint: rgba(128, 121, 232, .12);
+    --tint: rgba(128, 121, 232, .13);
+    --good-tint: rgba(53, 168, 102, .14);
+    --bad-tint: rgba(226, 96, 79, .14);
+    --hold-tint: rgba(184, 132, 42, .15);
+    --track: rgba(234, 240, 243, .09);
   }
 
   * { box-sizing: border-box; }
@@ -69,6 +81,9 @@
   @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
   .index { border-right: 1px solid var(--rule); overflow-y: auto; }
   .record { overflow-y: auto; padding: 24px 28px 60px; }
+  /* Without a ceiling the findings row stretches to the window and strands
+     its verdict a screen away from its label. */
+  .wrap { max-width: 860px; }
 
   .entry {
     display: block; width: 100%; text-align: left; font: inherit; color: inherit;
@@ -78,15 +93,13 @@
   }
   .entry:hover { background: var(--raised); }
   .entry:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
-  .entry[aria-current="true"] {
-    background: var(--tint); border-left-color: var(--signal);
-  }
+  .entry[aria-current="true"] { background: var(--tint); border-left-color: var(--signal); }
   .entry .id { font-weight: 500; }
   .entry .in { color: var(--ink-faint); }
-  .entry .verdict { margin-top: 5px; color: var(--ink-muted); }
+  .entry .standing { margin-top: 5px; color: var(--ink-muted); }
   .dot {
     display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-    margin-right: 6px; vertical-align: baseline;
+    margin-right: 6px;
   }
   .dot.good { background: var(--good); }
   .dot.hold { background: var(--hold); }
@@ -97,44 +110,72 @@
   .fault {
     margin: 16px 0 0; padding: 11px 14px;
     background: var(--raised); border: 1px solid var(--rule);
-    border-left: 2px solid var(--bad); color: var(--ink);
+    border-left: 2px solid var(--bad);
   }
   h3 {
     font-size: 13px; font-weight: 600; margin: 30px 0 0;
     padding-bottom: 9px; border-bottom: 1px solid var(--rule);
   }
-  .claim { margin: 10px 0 0; color: var(--ink-muted); max-width: 62ch; }
 
-  .findings { list-style: none; margin: 6px 0 0; padding: 0; }
+  /* The verdict is the one thing a person needs from across the room. */
+  .verdict {
+    margin: 14px 0 0; padding: 14px 16px;
+    background: var(--good-tint); border: 1px solid transparent;
+  }
+  .verdict.hold { background: var(--hold-tint); }
+  .verdict .call {
+    font-size: 17px; font-weight: 600; letter-spacing: -.01em; color: var(--good);
+  }
+  .verdict.hold .call { color: var(--hold); }
+  .verdict .because { margin: 3px 0 0; color: var(--ink-muted); max-width: 60ch; }
+
+  .findings { list-style: none; margin: 14px 0 0; padding: 0; }
   .finding {
-    display: flex; align-items: baseline; gap: 10px;
+    display: flex; align-items: center; gap: 12px;
     padding: 9px 2px; border-bottom: 1px solid var(--rule-soft);
   }
-  .finding .glyph { width: 12px; flex: none; font-weight: 600; }
+  .finding .glyph { width: 12px; flex: none; font-weight: 600; text-align: center; }
   .finding .what { flex: 1; min-width: 0; }
-  .finding .verdict { color: var(--ink-muted); }
   .finding .took {
     color: var(--ink-faint); font-variant-numeric: tabular-nums;
-    width: 52px; text-align: right; flex: none;
+    width: 50px; text-align: right; flex: none;
   }
-  .finding.pass .glyph, .finding.pass .verdict { color: var(--good); }
-  .finding.fail .glyph, .finding.fail .verdict { color: var(--bad); }
-  .finding.skipped .glyph, .finding.skipped .verdict { color: var(--hold); }
-  .finding.pending .glyph, .finding.pending .verdict { color: var(--ink-faint); }
+  .finding .said { width: 62px; text-align: right; flex: none; }
+  .finding.pass .glyph, .finding.pass .said { color: var(--good); }
+  .finding.fail .glyph, .finding.fail .said { color: var(--bad); }
+  .finding.skipped .glyph, .finding.skipped .said { color: var(--hold); }
+  .finding.pending .glyph, .finding.pending .said { color: var(--ink-faint); }
 
-  /* Detector feeds Fixer feeds Reviewer — the thread is the sequence. */
-  .thread { list-style: none; margin: 4px 0 0; padding: 0 0 0 20px; position: relative; }
+  /* Elapsed time, to scale. Replaying history dominates the budget, and that
+     is the honest shape of the work rather than a decoration. */
+  .track { width: 96px; flex: none; height: 4px; background: var(--track); }
+  .track > i { display: block; height: 100%; background: var(--ink-faint); }
+  .finding.pass .track > i { background: var(--good); }
+  .finding.fail .track > i { background: var(--bad); }
+  @media (prefers-reduced-motion: no-preference) {
+    .track > i { transition: width .45s cubic-bezier(.2, .7, .3, 1); }
+  }
+
+  .replayed { padding: 4px 2px 12px 24px; border-bottom: 1px solid var(--rule-soft); }
+  .runs { display: flex; gap: 3px; margin-bottom: 5px; }
+  .runs i {
+    width: 22px; height: 9px; background: var(--good); display: block;
+  }
+  .runs i.broke { background: var(--bad); }
+  .replayed .caption { color: var(--ink-faint); }
+
+  .thread { list-style: none; margin: 4px 0 0; padding: 0 0 0 22px; position: relative; }
   .thread::before {
-    content: ""; position: absolute; left: 3px; top: 12px; bottom: 12px;
+    content: ""; position: absolute; left: 4px; top: 16px; bottom: 16px;
     width: 1px; background: var(--rule);
   }
   .step { position: relative; padding: 14px 0; }
   .step::before {
-    content: ""; position: absolute; left: -20px; top: 19px;
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--ground); border: 1.5px solid var(--ink-faint);
+    content: ""; position: absolute; left: -22px; top: 18px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--signal); box-shadow: 0 0 0 3px var(--ground);
   }
-  .step .who { font-weight: 600; }
+  .step .who { font-weight: 600; text-transform: capitalize; }
   .step .model { color: var(--ink-faint); margin-left: 9px; }
   .step .said { margin: 6px 0 0; max-width: 66ch; color: var(--ink-muted); }
   .step .said p { margin: 0 0 .7em; }
@@ -164,15 +205,15 @@
 <script>
 const CHECKS = ["repro", "fix", "regression", "scope"];
 
-// What each check actually put to the test. Kept neutral so the row reads
-// correctly whether it passed, failed, or never ran.
+// What each check put to the test, worded so the row still reads correctly
+// when it failed or never ran.
 const TESTED = {
   repro: "Reproduce the reported failure",
   fix: "Patch clears the failure",
   regression: "Recorded runs still pass",
   scope: "Changes stay inside the diagnosed scope",
 };
-const VERDICT = { pass: "passed", fail: "failed", skipped: "not run", pending: "waiting" };
+const SAID = { pass: "passed", fail: "failed", skipped: "not run", pending: "waiting" };
 const GLYPH = { pass: "✓", fail: "✗", skipped: "–", pending: "·" };
 
 let selected = null;
@@ -239,7 +280,7 @@ function renderIndex(incidents) {
       '" data-id="' + esc(i.id) + '">' +
       '<div><span class="id mono">' + esc(i.task_id) + "</span>" +
       '<span class="in"> in ' + esc(i.dag_id) + "</span></div>" +
-      '<div class="verdict"><span class="dot ' + s.tone + '" aria-hidden="true"></span>' +
+      '<div class="standing"><span class="dot ' + s.tone + '" aria-hidden="true"></span>' +
       esc(s.words) + "</div></button>";
   }).join("");
   el.querySelectorAll(".entry").forEach(b => {
@@ -247,31 +288,50 @@ function renderIndex(incidents) {
   });
 }
 
-// The regression check knows how many recorded runs it replayed. That count is
-// the whole argument, so it belongs on the row rather than in a tooltip.
-function evidence(name, row) {
-  const d = (row && row.detail) || {};
-  if (name === "regression" && typeof d.total === "number")
-    return d.passed + " of " + d.total;
-  if (name === "scope" && Array.isArray(d.changed)) return d.changed.join(", ");
-  return "";
+function detailOf(row) { return (row && row.detail) || {}; }
+
+// The count of recorded runs replayed is the argument Orbit is making, so it
+// gets drawn rather than buried in a number.
+function replayStrip(row) {
+  const d = detailOf(row);
+  if (typeof d.total !== "number" || d.total <= 0) return "";
+  const broke = d.total - d.passed;
+  let cells = "";
+  for (let n = 0; n < d.total; n++) {
+    cells += '<i class="' + (n < d.passed ? "" : "broke") + '"></i>';
+  }
+  const caption = broke
+    ? d.passed + " of " + d.total + " recorded runs survived the patch, " + broke + " did not"
+    : "all " + d.total + " recorded runs replayed clean against the patch";
+  return '<li class="replayed"><div class="runs" role="img" aria-label="' +
+    esc(caption) + '">' + cells + '</div>' +
+    '<div class="caption">' + esc(caption) + "</div></li>";
 }
 
 function renderFindings(body) {
   const byName = {};
   body.checks.forEach(c => { byName[c.check] = c; });
+  const longest = Math.max(1, ...body.checks.map(c => c.duration_ms || 0));
+
   return CHECKS.map(name => {
     const row = byName[name];
     const status = row ? row.status : "pending";
-    const took = row && row.duration_ms ? (row.duration_ms / 1000).toFixed(1) + "s" : "";
-    const note = evidence(name, row);
-    return '<li class="finding ' + status + '">' +
+    const ms = (row && row.duration_ms) || 0;
+    const took = ms ? (ms / 1000).toFixed(1) + "s" : "";
+    const d = detailOf(row);
+    const note = name === "scope" && Array.isArray(d.changed) ? d.changed.join(", ") : "";
+
+    const item = '<li class="finding ' + status + '">' +
       '<span class="glyph" aria-hidden="true">' + GLYPH[status] + "</span>" +
       '<span class="what">' + TESTED[name] +
         (note ? ' <span class="mono" style="color:var(--ink-faint)">' + esc(note) + "</span>" : "") +
       "</span>" +
-      '<span class="verdict">' + VERDICT[status] + "</span>" +
+      '<span class="track" aria-hidden="true"><i style="width:' +
+        Math.round((ms / longest) * 100) + '%"></i></span>' +
+      '<span class="said">' + SAID[status] + "</span>" +
       '<span class="took">' + took + "</span></li>";
+
+    return name === "regression" ? item + replayStrip(row) : item;
   }).join("");
 }
 
@@ -282,27 +342,33 @@ async function renderRecord(id) {
     api("/incidents/" + id + "/transcript"),
   ]);
 
+  const regression = checks.checks.filter(c => c.check === "regression")[0];
+  const replayed = detailOf(regression).total;
   const proved = checks.passed === checks.total;
-  const claim = proved
-    ? "Every check cleared. The patch is ready for your decision."
-    : "Not every check cleared, so Orbit is not asking you to trust this one.";
+  const verdict = proved
+    ? '<div class="verdict"><div class="call">Proved</div><p class="because">' +
+      "Every check cleared" +
+      (replayed ? ", including " + replayed + " recorded runs of this pipeline replayed against the patch" : "") +
+      ". Orbit is asking you to approve it.</p></div>"
+    : '<div class="verdict hold"><div class="call">Not proved</div><p class="because">' +
+      checks.passed + " of " + checks.total + " checks cleared. Orbit will not " +
+      "vouch for this patch and has escalated it instead.</p></div>";
 
   const thread = transcript.messages.length
     ? '<ol class="thread">' + transcript.messages.map(m =>
         '<li class="step"><div><span class="who">' + esc(m.agent) + "</span>" +
         '<span class="model mono">' + esc(m.model || "") + "</span></div>" +
         '<div class="said">' + paragraphs(m.content) + "</div></li>").join("") + "</ol>"
-    : '<p class="claim">No agent has reported yet.</p>';
+    : '<p class="because">No agent has reported yet.</p>';
 
-  document.getElementById("record").innerHTML =
+  document.getElementById("record").innerHTML = '<div class="wrap">' +
     '<h2 class="mono">' + esc(incident.task_id) + "</h2>" +
     '<p class="where">failed in ' + esc(incident.dag_id) + "</p>" +
     '<p class="fault mono">' + esc(incident.exception_type) + ": " +
       esc(incident.exception_message) + "</p>" +
-    "<h3>Verification</h3>" +
-    '<p class="claim">' + claim + "</p>" +
+    "<h3>Verification</h3>" + verdict +
     '<ul class="findings">' + renderFindings(checks) + "</ul>" +
-    "<h3>How Orbit got there</h3>" + thread;
+    "<h3>How Orbit got there</h3>" + thread + "</div>";
 }
 
 async function refreshScoped() {
