@@ -84,9 +84,12 @@ def test_the_replay_strip_is_labelled_for_screen_readers():
     assert 'role="img"' in html and "aria-label" in html
 
 
-def test_the_verdict_states_the_outcome_in_words():
+def test_the_verdict_names_what_was_checked():
+    """"Proved" never said proved what, and overclaims what four checks can
+    establish. The panel speaks the same word the store does."""
     html = PANEL.read_text()
-    assert "Proved" in html and "Not proved" in html
+    assert "Fix verified" in html and "Not verified" in html
+    assert "Proved" not in html
 
 
 def test_durations_are_drawn_to_a_shared_scale():

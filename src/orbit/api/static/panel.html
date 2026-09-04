@@ -156,13 +156,16 @@
     .track > i { transition: width .45s cubic-bezier(.2, .7, .3, 1); }
   }
 
-  .replayed { padding: 4px 2px 12px 24px; border-bottom: 1px solid var(--rule-soft); }
-  .runs { display: flex; gap: 3px; margin-bottom: 5px; }
-  .runs i {
-    width: 22px; height: 9px; background: var(--good); display: block;
+  /* The one image that carries Orbit's argument, so it is sized to be seen. */
+  .replayed {
+    padding: 12px 14px 13px; margin: 2px 0 0 24px;
+    background: var(--good-tint); border-bottom: 1px solid var(--rule-soft);
   }
+  .replayed.broken { background: var(--bad-tint); }
+  .runs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .runs i { width: 34px; height: 20px; background: var(--good); display: block; }
   .runs i.broke { background: var(--bad); }
-  .replayed .caption { color: var(--ink-faint); }
+  .replayed .caption { color: var(--ink-muted); }
 
   .thread { list-style: none; margin: 4px 0 0; padding: 0 0 0 22px; position: relative; }
   .thread::before {
@@ -262,9 +265,9 @@ function paragraphs(text) {
 
 function standing(incident) {
   if (incident.resolution === "verified_awaiting_approval")
-    return { tone: "good", words: "Proved, waiting on you" };
+    return { tone: "good", words: "Verified, waiting on you" };
   if (incident.resolution === "escalated_not_verified")
-    return { tone: "hold", words: "Not proved, escalated" };
+    return { tone: "hold", words: "Not verified, escalated" };
   return { tone: "idle", words: incident.status.replace(/_/g, " ") };
 }
 
@@ -301,10 +304,10 @@ function replayStrip(row) {
     cells += '<i class="' + (n < d.passed ? "" : "broke") + '"></i>';
   }
   const caption = broke
-    ? d.passed + " of " + d.total + " recorded runs survived the patch, " + broke + " did not"
-    : "all " + d.total + " recorded runs replayed clean against the patch";
-  return '<li class="replayed"><div class="runs" role="img" aria-label="' +
-    esc(caption) + '">' + cells + '</div>' +
+    ? broke + " of " + d.total + " recorded runs broke under this patch"
+    : "All " + d.total + " recorded runs of this pipeline still pass with the patch applied";
+  return '<li class="replayed' + (broke ? " broken" : "") + '">' +
+    '<div class="runs" role="img" aria-label="' + esc(caption) + '">' + cells + "</div>" +
     '<div class="caption">' + esc(caption) + "</div></li>";
 }
 
@@ -346,13 +349,13 @@ async function renderRecord(id) {
   const replayed = detailOf(regression).total;
   const proved = checks.passed === checks.total;
   const verdict = proved
-    ? '<div class="verdict"><div class="call">Proved</div><p class="because">' +
-      "Every check cleared" +
-      (replayed ? ", including " + replayed + " recorded runs of this pipeline replayed against the patch" : "") +
+    ? '<div class="verdict"><div class="call">Fix verified</div><p class="because">' +
+      "All " + checks.total + " checks cleared" +
+      (replayed ? ", including a replay against " + replayed + " recorded runs of this pipeline" : "") +
       ". Orbit is asking you to approve it.</p></div>"
-    : '<div class="verdict hold"><div class="call">Not proved</div><p class="because">' +
-      checks.passed + " of " + checks.total + " checks cleared. Orbit will not " +
-      "vouch for this patch and has escalated it instead.</p></div>";
+    : '<div class="verdict hold"><div class="call">Not verified</div><p class="because">' +
+      checks.passed + " of " + checks.total + " checks cleared, so Orbit will not " +
+      "vouch for this patch. Sent to you undecided.</p></div>";
 
   const thread = transcript.messages.length
     ? '<ol class="thread">' + transcript.messages.map(m =>
@@ -387,7 +390,7 @@ async function refreshAll() {
   const [list, stats] = await Promise.all([api(incidentPath()), api("/stats")]);
   const incidents = list.incidents;
   document.getElementById("ledger").innerHTML =
-    "<div><b>" + stats.verified + "</b> proved</div>" +
+    "<div><b>" + stats.verified + "</b> verified</div>" +
     "<div><b>" + stats.escalated + "</b> escalated</div>" +
     "<div><b>" + stats.total_incidents + "</b> seen</div>";
   if (selected && !incidents.some(i => i.id === selected)) selected = null;
