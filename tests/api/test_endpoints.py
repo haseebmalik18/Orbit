@@ -94,9 +94,11 @@ def test_checks_report_progress_for_the_gauge(client, incident):
 
 
 def test_stats_counts_outcomes(client, repo, incident):
+    """Off the resolution the pipeline writes, not off a human decision — the
+    panel has to show real counts before anyone has approved anything."""
     other = repo.create_incident("retail_etl", "clean_orders", "run-2", 1, "E", "m")
-    repo.record_decision(incident, "verified", "Approve", "airflow")
-    repo.record_decision(other, "escalated", "Reject", "airflow")
+    repo.set_resolution(incident, "verified_awaiting_approval")
+    repo.set_resolution(other, "escalated_not_verified")
     body = client.get("/api/stats").json()
     assert body["verified"] == 1
     assert body["escalated"] == 1

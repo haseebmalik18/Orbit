@@ -210,16 +210,17 @@ class Repository:
     def stats(self) -> dict:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT path, COUNT(*) AS n FROM decisions GROUP BY path"
+                "SELECT resolution, COUNT(*) AS n FROM incidents"
+                " WHERE resolution IS NOT NULL GROUP BY resolution"
             ).fetchall()
             total = conn.execute("SELECT COUNT(*) AS n FROM incidents").fetchone()["n"]
             cost = conn.execute(
                 "SELECT COALESCE(SUM(usd), 0) AS usd FROM token_costs"
             ).fetchone()["usd"]
-        counts = {r["path"]: r["n"] for r in rows}
+        counts = {r["resolution"]: r["n"] for r in rows}
         return {
             "total_incidents": total,
-            "verified": counts.get("verified", 0),
-            "escalated": counts.get("escalated", 0),
+            "verified": counts.get("verified_awaiting_approval", 0),
+            "escalated": counts.get("escalated_not_verified", 0),
             "total_usd": round(cost, 4),
         }

@@ -24,10 +24,18 @@ class OrbitPlugin(AirflowPlugin):
             "category": "Browse",
         },
         # Airflow substitutes the braced tokens and URL-encodes each, so the
-        # panel opens already scoped to the task instance being viewed.
+        # panel opens already scoped to what is on screen. The tab bar on a
+        # task-instance page filters on "task_instance"; "task" is the
+        # across-runs page, where {RUN_ID} is left unsubstituted and the panel
+        # falls back to matching on dag and task alone.
         {
             "name": "Orbit",
             "href": "/orbit/ui/?dag_id={DAG_ID}&task_id={TASK_ID}&run_id={RUN_ID}",
+            "destination": "task_instance",
+        },
+        {
+            "name": "Orbit",
+            "href": "/orbit/ui/?dag_id={DAG_ID}&task_id={TASK_ID}",
             "destination": "task",
         },
     ]

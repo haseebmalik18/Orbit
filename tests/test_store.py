@@ -72,14 +72,32 @@ def test_list_incidents_filters_by_run(repo):
 
 
 def test_stats_counts_resolved_and_escalated(repo):
+    """Counted off the resolution the pipeline writes, not off a human
+    decision. Counting decisions left the panel showing 0 verified next to an
+    incident whose own badge said verified — nothing records a decision until
+    a human answers the approval card."""
     a = repo.create_incident("d", "t", "r1", 1, "E", "m")
     b = repo.create_incident("d", "t", "r2", 1, "E", "m")
-    repo.record_decision(a, "verified", "Approve", "airflow")
-    repo.record_decision(b, "escalated", "Reject", "airflow")
+    repo.set_resolution(a, "verified_awaiting_approval")
+    repo.set_resolution(b, "escalated_not_verified")
     stats = repo.stats()
     assert stats["verified"] == 1
     assert stats["escalated"] == 1
     assert stats["total_incidents"] == 2
+
+
+def test_stats_needs_no_human_decision(repo):
+    """No decision is recorded here — the count must still land."""
+    a = repo.create_incident("d", "t", "r1", 1, "E", "m")
+    repo.set_resolution(a, "verified_awaiting_approval")
+    assert repo.stats()["verified"] == 1
+
+
+def test_an_incident_still_running_counts_in_neither_bucket(repo):
+    repo.create_incident("d", "t", "r1", 1, "E", "m")
+    stats = repo.stats()
+    assert (stats["verified"], stats["escalated"]) == (0, 0)
+    assert stats["total_incidents"] == 1
 
 
 def test_set_status_on_unknown_incident_raises(repo):
