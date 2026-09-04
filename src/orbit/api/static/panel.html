@@ -72,6 +72,15 @@
   .list { border-right: 1px solid var(--border); overflow-y: auto; }
   .detail { padding: 18px; overflow-y: auto; }
 
+  /* Embedded in a task view: the surrounding page already says which task
+     this is, and global counts would be answering a question nobody asked. */
+  body[data-scope="task"] .tiles,
+  body[data-scope="task"] .list { display: none; }
+  body[data-scope="task"] main { grid-template-columns: 1fr; min-height: 0; }
+  body[data-scope="task"] header { padding: 10px 14px; }
+  body[data-scope="task"] .detail { padding: 14px; }
+  body[data-scope="task"] .detail > h2:first-child { display: none; }
+
   .row {
     padding: 11px 16px; border-bottom: 1px solid var(--border);
     cursor: pointer; display: flex; gap: 10px; align-items: baseline;
@@ -155,6 +164,33 @@ const CHECKS = ["repro", "fix", "regression", "scope"];
 const GLYPH = { pass: "✓", fail: "✗", skipped: "–", pending: "·" };
 let selected = null;
 
+const query = new URLSearchParams(location.search);
+
+// Airflow fills {DAG_ID}/{TASK_ID}/{RUN_ID} in the registered href. Anything
+// it does not recognise arrives as the literal token, which must not be
+// mistaken for a real id.
+function coordinate(name) {
+  const value = query.get(name);
+  return value && !/^\{[A-Z_]+\}$/.test(value) ? value : null;
+}
+
+const SCOPE = {
+  dag_id: coordinate("dag_id"),
+  task_id: coordinate("task_id"),
+  run_id: coordinate("run_id"),
+};
+const scoped = Boolean(SCOPE.dag_id && SCOPE.task_id);
+if (scoped) document.body.dataset.scope = "task";
+
+function incidentPath() {
+  if (!scoped) return "/incidents";
+  const q = new URLSearchParams();
+  for (const key of ["dag_id", "task_id", "run_id"]) {
+    if (SCOPE[key]) q.set(key, SCOPE[key]);
+  }
+  return "/incidents?" + q.toString();
+}
+
 async function api(path) {
   const r = await fetch("../api" + path, { credentials: "same-origin" });
   if (!r.ok) throw new Error(String(r.status));
@@ -232,29 +268,47 @@ async function renderDetail(id) {
     "<h2>Agents</h2>" + messages;
 }
 
+async function refreshScoped() {
+  const incidents = (await api(incidentPath())).incidents;
+  document.getElementById("sub").textContent = SCOPE.task_id;
+  if (!incidents.length) {
+    document.getElementById("detail").innerHTML =
+      '<div class="empty">No Orbit incident for this task instance.</div>';
+    selected = null;
+    return;
+  }
+  selected = incidents[0].id;
+  await renderDetail(selected);
+}
+
+async function refreshAll() {
+  const results = await Promise.all([api(incidentPath()), api("/stats")]);
+  const incidents = results[0].incidents;
+  const stats = results[1];
+  document.getElementById("t-verified").textContent = stats.verified;
+  document.getElementById("t-escalated").textContent = stats.escalated;
+  document.getElementById("t-total").textContent = stats.total_incidents;
+  document.getElementById("sub").textContent =
+    incidents.length + " incident" + (incidents.length === 1 ? "" : "s");
+  if (selected && !incidents.some(i => i.id === selected)) selected = null;
+  if (!selected && incidents.length) selected = incidents[0].id;
+  renderList(incidents);
+  if (selected) await renderDetail(selected);
+}
+
 async function refresh() {
   try {
-    const results = await Promise.all([api("/incidents"), api("/stats")]);
-    const incidents = results[0].incidents;
-    const stats = results[1];
-    document.getElementById("t-verified").textContent = stats.verified;
-    document.getElementById("t-escalated").textContent = stats.escalated;
-    document.getElementById("t-total").textContent = stats.total_incidents;
-    document.getElementById("sub").textContent =
-      incidents.length + " incident" + (incidents.length === 1 ? "" : "s");
-    if (selected && !incidents.some(i => i.id === selected)) selected = null;
-    if (!selected && incidents.length) selected = incidents[0].id;
-    renderList(incidents);
-    if (selected) await renderDetail(selected);
+    await (scoped ? refreshScoped() : refreshAll());
   } catch (e) {
-    document.getElementById("list").innerHTML =
+    const target = scoped ? "detail" : "list";
+    document.getElementById(target).innerHTML =
       '<div class="empty">Could not reach the Orbit API (' + esc(e.message) +
       ").<br>Is Airflow running, and are you signed in?</div>";
   }
 }
 
 refresh();
-setInterval(refresh, 3000);
+setInterval(refresh, 2000);
 </script>
 </body>
 </html>

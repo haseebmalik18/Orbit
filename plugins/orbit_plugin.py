@@ -22,5 +22,12 @@ class OrbitPlugin(AirflowPlugin):
             "href": "/orbit/ui/",
             "destination": "nav",
             "category": "Browse",
-        }
+        },
+        # Airflow substitutes the braced tokens and URL-encodes each, so the
+        # panel opens already scoped to the task instance being viewed.
+        {
+            "name": "Orbit",
+            "href": "/orbit/ui/?dag_id={DAG_ID}&task_id={TASK_ID}&run_id={RUN_ID}",
+            "destination": "task",
+        },
     ]

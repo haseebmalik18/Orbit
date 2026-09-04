@@ -49,3 +49,32 @@ def test_status_is_never_colour_alone():
     html = PANEL.read_text()
     assert "GLYPH" in html
     assert "aria-hidden" in html
+
+
+def test_panel_reads_the_task_coordinates_from_the_url():
+    """Airflow templates them into the href; the panel picks them up here."""
+    html = PANEL.read_text()
+    assert "URLSearchParams" in html
+    for param in ("dag_id", "task_id", "run_id"):
+        assert f'"{param}"' in html, param
+
+
+def test_scoped_mode_filters_the_incident_query():
+    """A task panel showing another task's incident is worse than showing none."""
+    html = PANEL.read_text()
+    assert "/incidents?" in html
+
+
+def test_scoped_mode_has_its_own_empty_state():
+    """Most tasks never have an incident. That is normal, not an error."""
+    html = PANEL.read_text()
+    assert "No Orbit incident" in html
+
+
+def test_poll_interval_meets_the_two_second_freshness_bar():
+    import re
+
+    html = PANEL.read_text()
+    intervals = [int(m) for m in re.findall(r"setInterval\([^,]+,\s*(\d+)\)", html)]
+    assert intervals, "panel does not poll at all"
+    assert max(intervals) <= 2000, intervals
