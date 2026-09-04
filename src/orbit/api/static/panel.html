@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface:        #fcfcfb;
+    --surface-raised: #ffffff;
+    --border:         #e3e2df;
+    --text:           #0b0b0b;
+    --text-2:         #52514e;
+    --text-3:         #7a7873;
+    --detector: #2a78d6;
+    --fixer:    #eb6834;
+    --reviewer: #1baf7a;
+    --good:     #0ca30c;
+    --warning:  #fab219;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface: #1a1a19; --surface-raised: #232322; --border: #34332f;
+      --text: #ffffff; --text-2: #c3c2b7; --text-3: #8b8a82;
+      --detector: #3987e5; --fixer: #d95926; --reviewer: #199e70;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #1a1a19; --surface-raised: #232322; --border: #34332f;
+    --text: #ffffff; --text-2: #c3c2b7; --text-3: #8b8a82;
+    --detector: #3987e5; --fixer: #d95926; --reviewer: #199e70;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--text);
+    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 15px; margin: 0; }
+  h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--text-3); margin: 0 0 10px; font-weight: 600;
+  }
+  .muted { color: var(--text-3); }
+
+  header {
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+  }
+  .tiles { display: flex; gap: 22px; margin-left: auto; }
+  .tile { text-align: right; }
+  .tile .n {
+    font-size: 22px; font-weight: 600; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .tile .k {
+    font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  .tile.good .n { color: var(--good); }
+  .tile.warn .n { color: var(--warning); }
+
+  main {
+    display: grid; grid-template-columns: minmax(250px, 330px) 1fr;
+    min-height: calc(100vh - 56px);
+  }
+  @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+  .list { border-right: 1px solid var(--border); overflow-y: auto; }
+  .detail { padding: 18px; overflow-y: auto; }
+
+  .row {
+    padding: 11px 16px; border-bottom: 1px solid var(--border);
+    cursor: pointer; display: flex; gap: 10px; align-items: baseline;
+  }
+  .row:hover { background: var(--surface-raised); }
+  .row[aria-selected="true"] {
+    background: var(--surface-raised);
+    box-shadow: inset 3px 0 0 var(--detector);
+  }
+  .row .task { font-weight: 600; }
+  .row .exc {
+    font-size: 12px; color: var(--text-2); margin-left: auto;
+    font-family: ui-monospace, monospace;
+  }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+    padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+    border: 1px solid var(--border); color: var(--text-2);
+  }
+  .pill.verified  { color: var(--good); border-color: var(--good); }
+  .pill.escalated { color: var(--warning); border-color: var(--warning); }
+
+  .checks { display: flex; gap: 2px; margin: 12px 0 22px; }
+  .check {
+    flex: 1; min-width: 0; padding: 10px 12px;
+    border: 1px solid var(--border); background: var(--surface-raised);
+  }
+  .check .name {
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--text-3);
+  }
+  .check .val {
+    display: flex; align-items: center; gap: 6px;
+    font-weight: 600; margin-top: 3px;
+  }
+  .check.pass .val { color: var(--good); }
+  .check.fail .val { color: var(--critical); }
+  .check.skipped .val, .check.pending .val { color: var(--text-3); font-weight: 500; }
+  .check .ms { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+  .msg { border-left: 3px solid var(--border); padding-left: 14px; margin: 0 0 18px; }
+  .msg.detector { border-color: var(--detector); }
+  .msg.fixer    { border-color: var(--fixer); }
+  .msg.reviewer { border-color: var(--reviewer); }
+  .msg .who {
+    font-weight: 600; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+  .msg.detector .who { color: var(--detector); }
+  .msg.fixer .who    { color: var(--fixer); }
+  .msg.reviewer .who { color: var(--reviewer); }
+  .msg .model {
+    font-size: 11px; color: var(--text-3);
+    font-family: ui-monospace, monospace; margin-left: 8px;
+  }
+  .msg .body { margin-top: 5px; white-space: pre-wrap; color: var(--text-2); }
+
+  .empty { padding: 40px 18px; color: var(--text-3); }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Orbit</h1>
+  <span class="muted" id="sub">loading</span>
+  <div class="tiles">
+    <div class="tile good"><div class="n" id="t-verified">–</div><div class="k">Verified</div></div>
+    <div class="tile warn"><div class="n" id="t-escalated">–</div><div class="k">Escalated</div></div>
+    <div class="tile"><div class="n" id="t-total">–</div><div class="k">Incidents</div></div>
+  </div>
+</header>
+
+<main>
+  <div class="list" id="list"><div class="empty">Loading…</div></div>
+  <div class="detail" id="detail"><div class="empty">Select an incident.</div></div>
+</main>
+
+<script>
+const CHECKS = ["repro", "fix", "regression", "scope"];
+const GLYPH = { pass: "✓", fail: "✗", skipped: "–", pending: "·" };
+let selected = null;
+
+async function api(path) {
+  const r = await fetch("../api" + path, { credentials: "same-origin" });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.json();
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function outcome(inc) {
+  if (inc.resolution === "verified_awaiting_approval")
+    return '<span class="pill verified">' + GLYPH.pass + " verified</span>";
+  if (inc.resolution === "escalated_not_verified")
+    return '<span class="pill escalated">! escalated</span>';
+  return '<span class="pill">' + esc(inc.status) + "</span>";
+}
+
+function renderList(incidents) {
+  const el = document.getElementById("list");
+  if (!incidents.length) {
+    el.innerHTML = '<div class="empty">No incidents yet. Fail a watched task to create one.</div>';
+    return;
+  }
+  el.innerHTML = incidents.map(i =>
+    '<div class="row" role="option" aria-selected="' + (i.id === selected) + '" data-id="' + esc(i.id) + '">' +
+      "<div>" +
+        '<div class="task">' + esc(i.task_id) + "</div>" +
+        '<div class="muted" style="font-size:12px">' + esc(i.dag_id) + "</div>" +
+        '<div style="margin-top:6px">' + outcome(i) + "</div>" +
+      "</div>" +
+      '<div class="exc">' + esc(i.exception_type) + "</div>" +
+    "</div>").join("");
+  el.querySelectorAll(".row").forEach(r => {
+    r.onclick = () => { selected = r.dataset.id; refresh(); };
+  });
+}
+
+async function renderDetail(id) {
+  const el = document.getElementById("detail");
+  const [incident, checksBody, transcript] = await Promise.all([
+    api("/incidents/" + id),
+    api("/incidents/" + id + "/checks"),
+    api("/incidents/" + id + "/transcript"),
+  ]);
+  const byName = {};
+  checksBody.checks.forEach(c => { byName[c.check] = c; });
+
+  const strip = CHECKS.map(name => {
+    const c = byName[name];
+    const status = c ? c.status : "pending";
+    const ms = c && c.duration_ms ? (c.duration_ms / 1000).toFixed(1) + "s" : "";
+    return '<div class="check ' + status + '">' +
+      '<div class="name">' + name + "</div>" +
+      '<div class="val"><span aria-hidden="true">' + GLYPH[status] + "</span>" + status + "</div>" +
+      '<div class="ms">' + ms + "</div>" +
+    "</div>";
+  }).join("");
+
+  const messages = transcript.messages.length
+    ? transcript.messages.map(m =>
+        '<div class="msg ' + esc(m.agent) + '">' +
+          '<div><span class="who">' + esc(m.agent) + "</span>" +
+          '<span class="model">' + esc(m.model || "") + "</span></div>" +
+          '<div class="body">' + esc(m.content) + "</div>" +
+        "</div>").join("")
+    : '<div class="muted">No agent output yet.</div>';
+
+  el.innerHTML =
+    "<h2>" + esc(incident.dag_id) + " &middot; " + esc(incident.task_id) + "</h2>" +
+    "<div><code>" + esc(incident.exception_type) + ": " + esc(incident.exception_message) + "</code></div>" +
+    '<h2 style="margin-top:20px">Verification &mdash; ' + checksBody.passed + "/" + checksBody.total + " passed</h2>" +
+    '<div class="checks">' + strip + "</div>" +
+    "<h2>Agents</h2>" + messages;
+}
+
+async function refresh() {
+  try {
+    const results = await Promise.all([api("/incidents"), api("/stats")]);
+    const incidents = results[0].incidents;
+    const stats = results[1];
+    document.getElementById("t-verified").textContent = stats.verified;
+    document.getElementById("t-escalated").textContent = stats.escalated;
+    document.getElementById("t-total").textContent = stats.total_incidents;
+    document.getElementById("sub").textContent =
+      incidents.length + " incident" + (incidents.length === 1 ? "" : "s");
+    if (selected && !incidents.some(i => i.id === selected)) selected = null;
+    if (!selected && incidents.length) selected = incidents[0].id;
+    renderList(incidents);
+    if (selected) await renderDetail(selected);
+  } catch (e) {
+    document.getElementById("list").innerHTML =
+      '<div class="empty">Could not reach the Orbit API (' + esc(e.message) +
+      ").<br>Is Airflow running, and are you signed in?</div>";
+  }
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

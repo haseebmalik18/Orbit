@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from orbit import __version__
 from orbit.api.deps import get_repository, require_auth
 from orbit.contracts import REQUIRED_CHECKS
 from orbit.store.repository import Repository
+
+PANEL = Path(__file__).parent / "static" / "panel.html"
 
 orbit_api = FastAPI(title="Orbit API")
 
@@ -73,3 +78,10 @@ def get_checks(incident_id: str, repo: Repository = Depends(get_repository)) -> 
 @orbit_api.get("/api/stats", dependencies=protected)
 def get_stats(repo: Repository = Depends(get_repository)) -> dict:
     return repo.stats()
+
+
+@orbit_api.get("/ui/", include_in_schema=False)
+def panel() -> FileResponse:
+    """The panel shell. Its data calls hit /api/* and carry the caller's
+    Airflow session, so the page itself needs no credentials of its own."""
+    return FileResponse(PANEL, media_type="text/html")

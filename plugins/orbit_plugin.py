@@ -16,3 +16,11 @@ class OrbitPlugin(AirflowPlugin):
             "name": "Orbit API",
         }
     ]
+    external_views = [
+        {
+            "name": "Orbit",
+            "href": "/orbit/ui/",
+            "destination": "nav",
+            "category": "Browse",
+        }
+    ]
