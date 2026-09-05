@@ -83,6 +83,19 @@ class Settings:
     max_prompt_chars: int = field(
         default_factory=lambda: int(os.getenv("ORBIT_MAX_PROMPT_CHARS", "12000"))
     )
+    # The project is bind-mounted here so git has a whole tree to work with.
+    # Mounting .git alone would make every unmounted path read as deleted.
+    repo_root: Path = field(
+        default_factory=lambda: Path(
+            os.getenv("ORBIT_REPO_ROOT", "/usr/local/airflow/repo")
+        )
+    )
+    dag_subdir: str = field(default_factory=lambda: os.getenv("ORBIT_DAG_SUBDIR", "dags"))
+    # An unanswered card must not hold a worker forever. On timeout the
+    # approval defaults to Reject, so silence never applies a patch.
+    hitl_timeout_minutes: int = field(
+        default_factory=lambda: int(os.getenv("ORBIT_HITL_TIMEOUT_MINUTES", "60"))
+    )
     watched_dag_ids: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:

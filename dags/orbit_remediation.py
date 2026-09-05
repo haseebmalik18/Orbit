@@ -6,10 +6,13 @@ from datetime import timedelta
 from pathlib import Path
 
 import pendulum
-from airflow.sdk import dag, task
+from airflow.providers.standard.operators.hitl import ApprovalOperator, HITLOperator
+from airflow.sdk import dag, get_current_context, task
 
 from orbit.agents import prompts, stubs
 from orbit.agents.budget import check_and_count
+from orbit.apply import apply_on_branch
+from orbit.cards import approval_body, escalation_body, subject_line
 from orbit.config import settings
 from orbit.contracts import (
     Diagnosis,
@@ -19,11 +22,19 @@ from orbit.contracts import (
     VerificationReport,
 )
 from orbit.evidence import collect
+from orbit.patch import render_diff
 from orbit.store.repository import Repository
 from orbit.trigger import AirflowClient
 from orbit.verifier.runner import verify as run_verification
 
 DAG_SOURCE_ROOT = Path(__file__).parent
+
+APPLY_ANYWAY = "Apply anyway"
+REJECT = "Reject"
+RETRY = "Retry with more context"
+# The uncertain path asks a different question from the confident one. That
+# difference is the point, so the options are not shared.
+ESCALATION_OPTIONS = [APPLY_ANYWAY, REJECT, RETRY]
 
 
 def _repo() -> Repository:
@@ -212,24 +223,141 @@ def orbit_remediation():
         )
         return "stage_verified" if verified else "stage_escalated"
 
-    @task
-    def stage_verified(evidence: dict) -> None:
+    @task(multiple_outputs=False)
+    def stage_verified(evidence: dict, report: dict, patch: dict) -> dict:
         repo = _repo()
         repo.set_status(evidence["incident_id"], "awaiting_human")
         repo.set_resolution(evidence["incident_id"], "verified_awaiting_approval")
+        parsed = ProposedPatch.model_validate(patch)
+        return {
+            "subject": subject_line(
+                evidence["dag_id"], evidence["task_id"], verified=True
+            ),
+            "body": approval_body(
+                VerificationReport.model_validate(report),
+                parsed,
+                render_diff(DAG_SOURCE_ROOT, parsed),
+            ),
+        }
 
-    @task
-    def stage_escalated(evidence: dict) -> None:
+    @task(multiple_outputs=False)
+    def stage_escalated(evidence: dict, report: dict, patch: dict, verdict: dict) -> dict:
         repo = _repo()
         repo.set_status(evidence["incident_id"], "awaiting_human")
         repo.set_resolution(evidence["incident_id"], "escalated_not_verified")
+        parsed = ProposedPatch.model_validate(patch)
+        return {
+            "subject": subject_line(
+                evidence["dag_id"], evidence["task_id"], verified=False
+            ),
+            "body": escalation_body(
+                VerificationReport.model_validate(report),
+                ReviewVerdict.model_validate(verdict),
+                parsed,
+                render_diff(DAG_SOURCE_ROOT, parsed),
+            ),
+        }
+
+    approve_verified_fix = ApprovalOperator(
+        task_id="approve_verified_fix",
+        subject="{{ ti.xcom_pull(task_ids='stage_verified')['subject'] }}",
+        body="{{ ti.xcom_pull(task_ids='stage_verified')['body'] }}",
+        # silence must never apply a patch
+        defaults=ApprovalOperator.REJECT,
+        response_timeout=timedelta(minutes=settings.hitl_timeout_minutes),
+    )
+
+    escalate_unverified = HITLOperator(
+        task_id="escalate_unverified",
+        subject="{{ ti.xcom_pull(task_ids='stage_escalated')['subject'] }}",
+        body="{{ ti.xcom_pull(task_ids='stage_escalated')['body'] }}",
+        options=ESCALATION_OPTIONS,
+        defaults=REJECT,
+        response_timeout=timedelta(minutes=settings.hitl_timeout_minutes),
+    )
+
+    @task.branch
+    def route_escalation(evidence: dict, response: dict) -> str:
+        chosen = (response.get("chosen_options") or [REJECT])[0]
+        _repo().record_decision(
+            evidence["incident_id"],
+            "escalated",
+            chosen,
+            response.get("responded_by_user") or "timeout",
+        )
+        return "apply_patch" if chosen == APPLY_ANYWAY else "close_unapplied"
+
+    @task
+    def record_approval(evidence: dict, response: dict) -> None:
+        chosen = (response.get("chosen_options") or [REJECT])[0]
+        _repo().record_decision(
+            evidence["incident_id"],
+            "verified",
+            chosen,
+            response.get("responded_by_user") or "timeout",
+        )
+
+    # Takes no arguments on purpose. Passing evidence and patch in would make
+    # collect_evidence and record_patch upstreams of this task, and a trigger
+    # rule counting successes would then fire it even when the human said no.
+    # Its only upstreams are the two gates.
+    @task(trigger_rule="one_success", multiple_outputs=False)
+    def apply_patch() -> dict:
+        context = get_current_context()
+        evidence = context["ti"].xcom_pull(task_ids="collect_evidence")
+        patch = context["ti"].xcom_pull(task_ids="record_patch")
+        repo = _repo()
+        incident_id = evidence["incident_id"]
+        repo.set_status(incident_id, "applying")
+        commit = apply_on_branch(
+            settings.repo_root,
+            ProposedPatch.model_validate(patch),
+            incident_id,
+            subdir=settings.dag_subdir,
+        )
+        repo.add_message(
+            incident_id,
+            "orbit",
+            "assistant",
+            f"Committed {commit['sha'][:12]} on {commit['branch']}.",
+            "",
+        )
+        return commit
+
+    @task
+    def rerun_failed_task(evidence: dict, commit: dict) -> None:
+        _client().clear_task_instance(
+            evidence["dag_id"], evidence["run_id"], evidence["task_id"]
+        )
+        _repo().set_status(evidence["incident_id"], "resolved")
+
+    @task
+    def close_unapplied(evidence: dict) -> None:
+        _repo().set_status(evidence["incident_id"], "resolved")
 
     evidence = collect_evidence()
     diagnosis = record_diagnosis(evidence, diagnose(evidence))
     patch = record_patch(evidence, propose_fix(evidence, diagnosis))
     report = verify(evidence, patch, diagnosis)
     verdict = record_review(evidence, review(evidence, diagnosis, patch, report))
-    decide(report, verdict) >> [stage_verified(evidence), stage_escalated(evidence)]
+
+    verified_card = stage_verified(evidence, report, patch)
+    escalated_card = stage_escalated(evidence, report, patch, verdict)
+    decide(report, verdict) >> [verified_card, escalated_card]
+
+    verified_card >> approve_verified_fix
+    escalated_card >> escalate_unverified
+
+    # Reject skips everything downstream of the approval, so no patch reaches
+    # apply_patch without someone having said yes.
+    approved = record_approval(evidence, approve_verified_fix.output)
+    routed = route_escalation(evidence, escalate_unverified.output)
+
+    commit = apply_patch()
+    approved >> commit
+    routed >> commit
+    routed >> close_unapplied(evidence)
+    commit >> rerun_failed_task(evidence, commit)
 
 
 orbit_remediation()

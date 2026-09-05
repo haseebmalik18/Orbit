@@ -3,6 +3,9 @@ x-orbit-volumes: &orbit-volumes
   - ./fixtures:/usr/local/airflow/fixtures:ro
   # scheduler writes incidents, api-server reads them: needs to be one file
   - ./.orbit:/usr/local/airflow/.orbit:rw
+  # An approved patch becomes a real commit, so git needs a real repository.
+  # Mounting .git alone would leave every unmounted path looking deleted.
+  - .:/usr/local/airflow/repo:rw
 
 # Astro's compose sets all_admins=True so local dev needs no login. Orbit is
 # mounted inside the api-server and inherits that, which would leave its

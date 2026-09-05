@@ -75,6 +75,40 @@ class AirflowClient:
             raise TriggerFailed(f"could not trigger {dag_id}: {exc}") from exc
         return response.json()["dag_run_id"]
 
+    def clear_task_instance(self, dag_id: str, run_id: str, task_id: str) -> None:
+        """Rerun one failed task in place, against the patched code.
+
+        Clearing rather than triggering a fresh run is deliberate: it turns the
+        original failure green instead of leaving it on screen beside a
+        separate success.
+        """
+        body = {
+            "dag_run_id": run_id,
+            "task_ids": [task_id],
+            # Airflow defaults this to true; omitting it clears nothing and
+            # still returns 200
+            "dry_run": False,
+            "only_failed": True,
+            "include_upstream": False,
+            "include_downstream": False,
+            "include_past": False,
+            "include_future": False,
+            "reset_dag_runs": True,
+            "run_on_latest_version": True,
+        }
+        try:
+            response = requests.post(
+                f"{self.api_url}/dags/{dag_id}/clearTaskInstances",
+                json=body,
+                headers=self._headers(),
+                timeout=TIMEOUT_S,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise TriggerFailed(
+                f"could not rerun {dag_id}.{task_id} in {run_id}: {exc}"
+            ) from exc
+
     def get_xcom(
         self, dag_id: str, run_id: str, task_id: str, key: str = "return_value"
     ) -> Any:

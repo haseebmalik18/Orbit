@@ -13,6 +13,13 @@ EXPECTED_TASKS = {
     "decide",
     "stage_verified",
     "stage_escalated",
+    "approve_verified_fix",
+    "escalate_unverified",
+    "record_approval",
+    "route_escalation",
+    "apply_patch",
+    "rerun_failed_task",
+    "close_unapplied",
 }
 
 
@@ -109,3 +116,69 @@ def test_task_ids_are_identical_in_stub_and_real_mode(monkeypatch):
 def test_remediation_dag_is_not_scheduled(dagbag):
     """It only ever runs when the listener triggers it."""
     assert dagbag.dags["orbit_remediation"].schedule is None
+
+
+def test_apply_is_reachable_only_through_a_human_gate(dagbag):
+    """The safety property of the whole project. Each task feeding apply_patch
+    has a HITL operator upstream and demands all of its upstreams succeed, so a
+    skipped gate — which is what Reject produces — stops the apply."""
+    dag = dagbag.dags["orbit_remediation"]
+    gates = {"approve_verified_fix", "escalate_unverified"}
+
+    feeders = dag.get_task("apply_patch").upstream_task_ids
+    assert feeders, "apply_patch has no upstream at all"
+    for name in feeders:
+        feeder = dag.get_task(name)
+        assert feeder.upstream_task_ids & gates, f"{name} bypasses the human gate"
+        assert feeder.trigger_rule == "all_success", (
+            f"{name} could run without its gate succeeding"
+        )
+
+
+def test_rejecting_the_approval_skips_the_apply(dagbag):
+    """ApprovalOperator skips its downstream on Reject, so this is structural
+    rather than an if-statement inside the apply task."""
+    from airflow.providers.standard.operators.hitl import ApprovalOperator
+
+    dag = dagbag.dags["orbit_remediation"]
+    assert isinstance(dag.get_task("approve_verified_fix"), ApprovalOperator)
+
+
+def test_an_unanswered_approval_defaults_to_reject(dagbag):
+    """Silence must never apply a patch."""
+    dag = dagbag.dags["orbit_remediation"]
+    approval = dag.get_task("approve_verified_fix")
+    assert approval.defaults == ["Reject"]
+    assert approval.response_timeout is not None
+
+
+def test_the_escalation_offers_all_three_options(dagbag):
+    dag = dagbag.dags["orbit_remediation"]
+    assert dag.get_task("escalate_unverified").options == [
+        "Apply anyway",
+        "Reject",
+        "Retry with more context",
+    ]
+
+
+def test_an_unanswered_escalation_defaults_to_reject(dagbag):
+    dag = dagbag.dags["orbit_remediation"]
+    assert dag.get_task("escalate_unverified").defaults == ["Reject"]
+
+
+def test_the_rerun_happens_only_after_a_successful_apply(dagbag):
+    """Default trigger rule, so a skipped or failed apply stops the rerun."""
+    dag = dagbag.dags["orbit_remediation"]
+    rerun = dag.get_task("rerun_failed_task")
+    assert "apply_patch" in rerun.upstream_task_ids
+    assert rerun.trigger_rule == "all_success"
+
+
+def test_apply_depends_on_nothing_but_the_two_gates(dagbag):
+    """Any other upstream lets a success-counting trigger rule fire the apply
+    while the human's answer was Reject."""
+    dag = dagbag.dags["orbit_remediation"]
+    assert dag.get_task("apply_patch").upstream_task_ids == {
+        "record_approval",
+        "route_escalation",
+    }
