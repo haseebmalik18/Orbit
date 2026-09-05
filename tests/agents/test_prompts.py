@@ -136,3 +136,21 @@ def test_prompts_are_deterministic():
     assert fixer_prompt(_evidence(), _diagnosis()) == fixer_prompt(
         _evidence(), _diagnosis()
     )
+
+
+def test_reviewer_is_warned_about_default_substitution():
+    """The trap scenario replaces an unparseable amount with 0.0. Every
+    automated check passes, so the reviewer is the only thing that can catch
+    it — and it will not unless the prompt names this category."""
+    from orbit.agents.prompts import REVIEWER_SYSTEM
+
+    assert "substituting a default" in REVIEWER_SYSTEM
+    assert "0.0" in REVIEWER_SYSTEM
+
+
+def test_reviewer_is_told_green_checks_are_not_proof_of_safety():
+    """Recorded runs hold only healthy rows, so a default that fires only on
+    bad input cannot move any check."""
+    from orbit.agents.prompts import REVIEWER_SYSTEM
+
+    assert "healthy rows" in REVIEWER_SYSTEM

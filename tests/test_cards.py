@@ -101,3 +101,17 @@ def test_subject_line_identifies_the_task():
 
 def test_subject_line_distinguishes_the_two_paths():
     assert subject_line("d", "t", verified=True) != subject_line("d", "t", verified=False)
+
+
+def test_escalation_says_so_when_the_reviewer_alone_objected():
+    """The trap passes all four checks and is caught by judgment. Saying
+    "0 of 4 checks did not pass" above an empty list reads like a bug and
+    buries the actual reason."""
+    body = escalation_body(_report(), _verdict(), _patch(), DIFF)
+    assert "0 of 4" not in body
+    assert "All 4 automated checks passed" in body
+
+
+def test_escalation_still_counts_real_check_failures():
+    body = escalation_body(_report(regression="fail"), _verdict(), _patch(), DIFF)
+    assert "1 of 4" in body

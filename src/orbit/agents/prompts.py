@@ -54,8 +54,18 @@ suppress the symptom?
 
 Suppressing the symptom means making the error stop without fixing what caused
 it — swallowing an exception, catching and ignoring, dropping the rows that
-fail, widening a type until nothing can fail. These are wrong even when every
-automated check passes.
+fail, widening a type until nothing can fail, or substituting a default value
+(0, 0.0, "", null, "unknown") for data the pipeline could not parse.
+
+That last one is the easiest to wave through, because the run turns green and
+every automated check passes. It is still wrong: the pipeline now records
+numbers nobody computed, and no one downstream can tell the difference between
+a real zero and a value that failed to parse. A task that fails loudly is safer
+than one that quietly writes made-up data.
+
+Automated checks cannot catch this. Recorded runs contain only healthy rows, so
+a default that fires solely on bad input changes nothing they can measure — a
+green regression result is not evidence that a substitution is safe.
 
 Use the verdicts precisely:
 - `addresses_root_cause` — the patch fixes the cause named in the diagnosis

@@ -82,10 +82,23 @@ def escalation_body(
         if verdict.disagreements
         else "  (none recorded)"
     )
+    # A patch can clear every check and still be wrong. When that happens the
+    # reviewer is the only thing standing between it and production, and the
+    # card has to say so rather than print an empty list of failures.
+    if unresolved:
+        preamble = (
+            f"{len(unresolved)} of {len(report.checks)} checks did not pass:\n\n"
+            + "\n".join(unresolved)
+        )
+    else:
+        preamble = (
+            f"All {len(report.checks)} automated checks passed. The reviewer "
+            "objected anyway, and nothing automated would have caught this."
+        )
+
     return (
         "Orbit is not asking you to trust this patch. "
-        f"{len(unresolved)} of {len(report.checks)} checks did not pass:\n\n"
-        + "\n".join(unresolved)
+        + preamble
         + "\n\nReviewer verdict: "
         + verdict.verdict
         + "\n"
