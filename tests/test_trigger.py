@@ -187,3 +187,40 @@ def test_get_task_log_handles_list_content(monkeypatch):
         requests, "get", lambda *a, **k: MockResponse(200, {"content": ["a", "b"]})
     )
     assert _client().get_task_log("d", "r", "t", 1) == ["a", "b"]
+
+
+def test_password_falls_back_to_the_shared_generated_file(tmp_path):
+    """SimpleAuthManager generates a random password per container. Every
+    container is pointed at one shared file so the scheduler and the API server
+    agree; without this the listener cannot authenticate at all."""
+    import json
+
+    from orbit.trigger import resolve_password
+
+    path = tmp_path / "passwords.json"
+    path.write_text(json.dumps({"admin": "generated-secret"}))
+    assert resolve_password("", path, "admin") == "generated-secret"
+
+
+def test_an_explicit_password_wins_over_the_file(tmp_path):
+    import json
+
+    from orbit.trigger import resolve_password
+
+    path = tmp_path / "passwords.json"
+    path.write_text(json.dumps({"admin": "generated-secret"}))
+    assert resolve_password("chosen", path, "admin") == "chosen"
+
+
+def test_a_missing_password_file_is_not_fatal(tmp_path):
+    from orbit.trigger import resolve_password
+
+    assert resolve_password("", tmp_path / "absent.json", "admin") == ""
+
+
+def test_an_unparseable_password_file_is_not_fatal(tmp_path):
+    from orbit.trigger import resolve_password
+
+    path = tmp_path / "passwords.json"
+    path.write_text("not json at all")
+    assert resolve_password("", path, "admin") == ""

@@ -22,9 +22,10 @@ from orbit.contracts import (
     VerificationReport,
 )
 from orbit.evidence import collect
+from orbit.hitl import chosen_option, responder
 from orbit.patch import render_diff
 from orbit.store.repository import Repository
-from orbit.trigger import AirflowClient
+from orbit.trigger import client_from_settings
 from orbit.verifier.runner import verify as run_verification
 
 DAG_SOURCE_ROOT = Path(__file__).parent
@@ -41,13 +42,8 @@ def _repo() -> Repository:
     return Repository(settings.db_path)
 
 
-def _client() -> AirflowClient:
-    return AirflowClient(
-        settings.airflow_base_url,
-        settings.airflow_api_token,
-        settings.airflow_username,
-        settings.airflow_password,
-    )
+def _client():
+    return client_from_settings()
 
 
 def _stub_agent_tasks():
@@ -278,23 +274,19 @@ def orbit_remediation():
 
     @task.branch
     def route_escalation(evidence: dict, response: dict) -> str:
-        chosen = (response.get("chosen_options") or [REJECT])[0]
+        chosen = chosen_option(response, REJECT)
         _repo().record_decision(
-            evidence["incident_id"],
-            "escalated",
-            chosen,
-            response.get("responded_by_user") or "timeout",
+            evidence["incident_id"], "escalated", chosen, responder(response)
         )
         return "apply_patch" if chosen == APPLY_ANYWAY else "close_unapplied"
 
     @task
     def record_approval(evidence: dict, response: dict) -> None:
-        chosen = (response.get("chosen_options") or [REJECT])[0]
         _repo().record_decision(
             evidence["incident_id"],
             "verified",
-            chosen,
-            response.get("responded_by_user") or "timeout",
+            chosen_option(response, REJECT),
+            responder(response),
         )
 
     # Takes no arguments on purpose. Passing evidence and patch in would make

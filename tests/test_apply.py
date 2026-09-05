@@ -27,10 +27,15 @@ def repo(tmp_path):
     (root / "dags" / "retail_etl.py").write_text(BEFORE)
     (root / "untouched.txt").write_text("leave me alone\n")
     git(root.parent, "init", "-q", str(root))
-    git(root, "config", "user.email", "orbit@test")
-    git(root, "config", "user.name", "Orbit")
     git(root, "add", "-A")
-    git(root, "commit", "-q", "-m", "initial")
+    # Identity passed per-command rather than configured, so the repository is
+    # left without one — which is the state inside the Airflow containers.
+    git(
+        root,
+        "-c", "user.email=setup@test",
+        "-c", "user.name=Setup",
+        "commit", "-q", "-m", "initial",
+    )
     return root
 
 
@@ -104,3 +109,10 @@ def test_applying_outside_a_repository_fails_loudly(tmp_path):
     (root / "dags" / "retail_etl.py").write_text(BEFORE)
     with pytest.raises(ApplyFailed):
         apply_on_branch(root, _patch(), "inc-1", subdir="dags")
+
+
+def test_the_commit_is_authored_by_orbit(repo):
+    """Containers carry no git identity, so the commit has to bring its own or
+    git refuses with "Author identity unknown"."""
+    result = apply_on_branch(repo, _patch(), "inc-1", subdir="dags")
+    assert git(repo, "show", "-s", "--format=%an", result["sha"]) == "Orbit"

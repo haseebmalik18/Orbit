@@ -12,6 +12,10 @@ x-orbit-volumes: &orbit-volumes
 # endpoints open. Turn it off so auth is actually exercised.
 x-orbit-env: &orbit-env
   AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "False"
+  # SimpleAuthManager generates a password per container, so the scheduler's
+  # would not match the API server's and the listener could not authenticate.
+  # One shared file on the .orbit mount keeps every container in agreement.
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /usr/local/airflow/.orbit/simple_auth_manager_passwords.json
 
 services:
   scheduler:

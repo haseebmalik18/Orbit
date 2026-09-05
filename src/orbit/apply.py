@@ -21,6 +21,17 @@ class ApplyFailed(RuntimeError):
     pass
 
 
+# The containers carry no git identity, so a commit there dies with "Author
+# identity unknown". Naming Orbit explicitly also keeps authorship honest:
+# the machine wrote the patch, a human approved it.
+AUTHORSHIP = {
+    "GIT_AUTHOR_NAME": "Orbit",
+    "GIT_AUTHOR_EMAIL": "orbit@localhost",
+    "GIT_COMMITTER_NAME": "Orbit",
+    "GIT_COMMITTER_EMAIL": "orbit@localhost",
+}
+
+
 def _git(root: Path, *args: str, env: dict[str, str] | None = None) -> str:
     result = subprocess.run(
         # The worker does not own the bind-mounted checkout, which trips git's
@@ -52,7 +63,7 @@ def _commit_without_checkout(
         tree = _git(root, "write-tree", env=index)
 
     head = _git(root, "rev-parse", "HEAD")
-    sha = _git(root, "commit-tree", tree, "-p", head, "-m", message)
+    sha = _git(root, "commit-tree", tree, "-p", head, "-m", message, env=AUTHORSHIP)
     _git(root, "branch", "-f", branch, sha)
     return sha
 

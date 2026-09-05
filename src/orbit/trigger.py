@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -9,6 +11,38 @@ TIMEOUT_S = 10
 
 class TriggerFailed(RuntimeError):
     """The Airflow REST API rejected a request or was unreachable."""
+
+
+def resolve_password(configured: str, password_file: Path, username: str) -> str:
+    """Fall back to the password SimpleAuthManager generated.
+
+    Each container generates its own file by default, so the scheduler's
+    password does not match the API server's and the listener cannot
+    authenticate. Every container is pointed at one shared file instead; this
+    reads whatever landed there.
+    """
+    if configured:
+        return configured
+    try:
+        return json.loads(Path(password_file).read_text()).get(username, "")
+    except (OSError, ValueError):
+        return ""
+
+
+def client_from_settings() -> AirflowClient:
+    """The one way Orbit builds a client, so the password is resolved once."""
+    from orbit.config import settings
+
+    return AirflowClient(
+        settings.airflow_base_url,
+        settings.airflow_api_token,
+        settings.airflow_username,
+        resolve_password(
+            settings.airflow_password,
+            settings.airflow_password_file,
+            settings.airflow_username,
+        ),
+    )
 
 
 class AirflowClient:
@@ -88,9 +122,15 @@ class AirflowClient:
             # Airflow defaults this to true; omitting it clears nothing and
             # still returns 200
             "dry_run": False,
-            "only_failed": True,
+            # upstream_failed is a different state from failed, so this filter
+            # would skip exactly the blocked downstream tasks we need back.
+            # task_ids already scopes the clear to this task and below.
+            "only_failed": False,
             "include_upstream": False,
-            "include_downstream": False,
+            # Downstream tasks are sitting in upstream_failed purely because of
+            # this failure. Leaving them there means the fix lands and the run
+            # still reads red.
+            "include_downstream": True,
             "include_past": False,
             "include_future": False,
             "reset_dag_runs": True,

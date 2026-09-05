@@ -61,11 +61,27 @@ def test_clear_runs_against_the_patched_code(client, monkeypatch):
     assert sent["body"]["run_on_latest_version"] is True
 
 
-def test_clear_leaves_healthy_tasks_alone(client, monkeypatch):
+def test_clear_reaches_the_tasks_the_failure_blocked(client, monkeypatch):
+    """Downstream tasks are in upstream_failed because of this failure, so a
+    fix that leaves them there produces a green task inside a red run."""
     sent = _capture(monkeypatch)
     client.clear_task_instance("retail_etl", "run-1", "clean_orders")
-    assert sent["body"]["include_downstream"] is False
+    assert sent["body"]["include_downstream"] is True
+
+
+def test_clear_does_not_rerun_work_that_already_succeeded(client, monkeypatch):
+    """Scoped by task_ids and no upstream, so successful earlier tasks stand."""
+    sent = _capture(monkeypatch)
+    client.clear_task_instance("retail_etl", "run-1", "clean_orders")
     assert sent["body"]["include_upstream"] is False
+
+
+def test_clear_does_not_filter_to_failed_only(client, monkeypatch):
+    """Blocked downstream tasks sit in upstream_failed, not failed. Filtering
+    on failed would leave them stranded and the run red after a good fix."""
+    sent = _capture(monkeypatch)
+    client.clear_task_instance("retail_etl", "run-1", "clean_orders")
+    assert sent["body"]["only_failed"] is False
 
 
 def test_a_rejected_clear_raises(client, monkeypatch):

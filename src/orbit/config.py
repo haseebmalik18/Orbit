@@ -32,8 +32,18 @@ class Settings:
     airflow_username: str = field(
         default_factory=lambda: os.getenv("ORBIT_AIRFLOW_USERNAME", "admin")
     )
+    # Empty by default: SimpleAuthManager generates the password, and all
+    # containers share one file so they agree on what it is.
     airflow_password: str = field(
-        default_factory=lambda: os.getenv("ORBIT_AIRFLOW_PASSWORD", "admin")
+        default_factory=lambda: os.getenv("ORBIT_AIRFLOW_PASSWORD", "")
+    )
+    airflow_password_file: Path = field(
+        default_factory=lambda: Path(
+            os.getenv(
+                "ORBIT_AIRFLOW_PASSWORD_FILE",
+                "/usr/local/airflow/.orbit/simple_auth_manager_passwords.json",
+            )
+        )
     )
     airflow_api_token: str = field(
         default_factory=lambda: os.getenv("ORBIT_AIRFLOW_API_TOKEN", "")
@@ -74,7 +84,7 @@ class Settings:
     # shares its blind spots
     reviewer_model: str = field(
         default_factory=lambda: os.getenv(
-            "ORBIT_REVIEWER_MODEL", "mistral:mistral-large-latest"
+            "ORBIT_REVIEWER_MODEL", "mistral:ministral-8b-latest"
         )
     )
     max_agent_calls_per_incident: int = field(

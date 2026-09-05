@@ -8,7 +8,7 @@ from airflow.listeners import hookimpl
 
 from orbit.config import settings
 from orbit.store.repository import Repository
-from orbit.trigger import AirflowClient
+from orbit.trigger import client_from_settings
 
 log = logging.getLogger(__name__)
 
@@ -20,12 +20,7 @@ def _repository() -> Repository:
 
 
 def _client() -> AirflowClient:
-    return AirflowClient(
-        settings.airflow_base_url,
-        settings.airflow_api_token,
-        settings.airflow_username,
-        settings.airflow_password,
-    )
+    return client_from_settings()
 
 
 def _describe_error(error: Any) -> tuple[str, str]:
